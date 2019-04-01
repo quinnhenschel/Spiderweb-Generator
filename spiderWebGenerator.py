@@ -31,12 +31,25 @@ cmds.showWindow(myWin)
 ##########################################    Doing The Thing    ###########################################
 
 def generateWebs():
+    setNumPoints()
     meshes = determineSelectedObjects()
-    obj1 = findFaces(meshes[0])     # Returns list of faces as [face normal, center, vertexA, vtxB, vtxC, vtxD]
+    obj1 = findFaces(meshes[0])     # Returns list of faces as [face normal, center, vertexA, vtxB, vtxC]
     obj2 = findFaces(meshes[1])
     pairs = curveFaces(obj1, obj2)  # Return list if start/end potential pairs as [start point, end point, midpoint]
     createCurve(pairs)
 
+
+def createCurve(pairs):
+    global nextWebId
+
+    for pair in pairs:
+        generatePointCloud(pair)
+        for i in range (0, density):
+            ns = "Web" + str(nextWebId)
+            cmds.curve(degree=3, ep=[pair[0], pair[2], pair[1]], n=ns)
+            #cmds.select(ns + ".ep[1]")
+            #cmds.move(0.0, -1.0, 0.0, r=True)
+            nextWebId = nextWebId + 1
 
 
 
@@ -66,7 +79,6 @@ def findFaces(mesh):
     faceCount = cmds.polyEvaluate(mesh, face=True)
 
     meshTransform = cmds.xform(mesh, query=True, matrix=True, worldSpace=True)
-    # center = getfacecenters()
     
     for face in range(0, faceCount):
         faceName = mesh + ".f[" + str(face) + "]"
@@ -120,7 +132,7 @@ def curveFaces(obj1, obj2):
     for item in distances:
         dp = getDotProduct(item[2], item[4])
         if dp < 0:
-            # Center (for hang)
+            # Midpoint of curve (for hang)
             midPoint = [0.0, 0.0, 0.0]
             midPoint[0] =  item[1][0] + (0.5 * (item[3][0] -item[1][0]))
             midPoint[1] =  item[1][1] + (0.5 * (item[3][1] -item[1][1]))
@@ -132,18 +144,22 @@ def curveFaces(obj1, obj2):
     return pairs
 
 
-##########################################     Bezier Curve     ###########################################
-
-
-def createCurve(pairs):
-    for pair in pairs:
-        cmds.curve(bez=True, degree=3, p=[pair[0], pair[0], pair[2], pair[2], pair[2], pair[1], pair[1]], k=[0,0,0,1,1,1,2,2,2])
+def setNumPoints():
+    global density
+    density = cmds.intSliderGrp('density', q=Ture, v-True)
 
 
 
 
 
 ##########################################   Helper Functions   ###########################################
+
+def generatePointCloud(pair):
+    startPoint = pair[0]
+    endPoint = pair[1]
+
+    
+
 
 
 def matrixMult(Mtx, Pt):
