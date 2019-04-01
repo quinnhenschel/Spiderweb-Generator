@@ -2,6 +2,7 @@ import maya.cmds as cmds
 import random as rnd
 import math
 ZV = 0.000000000000000000001  # Zero value to compare against
+rnd.seed()
 
 if 'myWin' in globals():
     if cmds.window(myWin, exists=True):
@@ -33,9 +34,9 @@ cmds.showWindow(myWin)
 def generateWebs():
     setNumPoints()
     meshes = determineSelectedObjects()
-    obj1 = findFaces(meshes[0])     # Returns list of faces as [face normal, center, vertexA, vtxB, vtxC]
+    obj1 = findFaces(meshes[0])     # Returns list of faces as [face normal, center, pointCloud]
     obj2 = findFaces(meshes[1])
-    pairs = curveFaces(obj1, obj2)  # Return list if start/end potential pairs as [start point, end point, midpoint]
+    pairs = curveFaces(obj1, obj2)  # Return list of start/end potential pairs as [startPointCloud, endPointCloud, midpoint]
     createCurve(pairs)
 
 
@@ -43,12 +44,18 @@ def createCurve(pairs):
     global nextWebId
 
     for pair in pairs:
-        generatePointCloud(pair)
         for i in range (0, density):
+
+            # Midpoint of curve (for hang)
+            midPoint = [0.0, 0.0, 0.0]
+        
+            midPoint[0] = pair[0][i][0] + (0.5 * (pair[1][i][0] - pair[0][i][0]))
+            midPoint[1] = pair[0][i][1] + (0.5 * (pair[1][i][1] - pair[0][i][1]))
+            midPoint[2] = pair[0][i][2] + (0.5 * (pair[1][i][2] - pair[0][i][2]))
+
             ns = "Web" + str(nextWebId)
-            cmds.curve(degree=3, ep=[pair[0], pair[2], pair[1]], n=ns)
-            #cmds.select(ns + ".ep[1]")
-            #cmds.move(0.0, -1.0, 0.0, r=True)
+            cmds.curve(degree=3, ep=[pair[0][i], midPoint, pair[1][i]], n=ns)
+            
             nextWebId = nextWebId + 1
 
 
@@ -104,13 +111,23 @@ def findFaces(mesh):
         #vtxD = matrixMult(meshTransform, vtxD)
 
         normal = getNormal(vtxA, vtxB, vtxC)
+        planeEq = getPlaneEq(vtxA, normal)
 
-        # Getting center of the face
+        # Getting center of the face by querying the position of the move manipulator
         cmds.select(faceName)
         cmds.setToolTo('moveSuperContext')
         centerPos = cmds.manipMoveContext('Move', q=True, p=True)
 
-        faceInfo = [normal, centerPos, vtxA[:3], vtxB[:3], vtxC[:3]]
+        # Getting point cloud
+        radius = [0.0 ,0.0, 0.0]
+        points = []
+        vecAB = convertToVec(vtxA, vtxB)
+        vecAC = convertToVec(vtxA, vtxC)
+        for axes in range(0, len(vecAB)):
+            radius[axes] = ((vecAB[axes] + vecAC[axes])/ 2.0)
+        points = generatePointCloud(planeEq, centerPos, radius)
+
+        faceInfo = [normal, centerPos, points]
         faces.append(faceInfo)
     return faces
 
@@ -123,7 +140,7 @@ def curveFaces(obj1, obj2):
         for end in obj2:
             distance = convertToVec(start[1], end[1])
             distance = getMagnitude(distance)
-            distance = [distance, start[1], start[0], end[1], end[0]]
+            distance = [distance, start[1], start[0], end[1], end[0], start[2], end[2]]
             tmp.append(distance)
         tmp.sort()
         distances.append(tmp[0])
@@ -132,13 +149,7 @@ def curveFaces(obj1, obj2):
     for item in distances:
         dp = getDotProduct(item[2], item[4])
         if dp < 0:
-            # Midpoint of curve (for hang)
-            midPoint = [0.0, 0.0, 0.0]
-            midPoint[0] =  item[1][0] + (0.5 * (item[3][0] -item[1][0]))
-            midPoint[1] =  item[1][1] + (0.5 * (item[3][1] -item[1][1]))
-            midPoint[2] =  item[1][2] + (0.5 * (item[3][2] -item[1][2]))
-
-            pair = [item[1], item[3], midPoint]
+            pair = [item[5], item[6]]
             pairs.append(pair)
          
     return pairs
@@ -146,7 +157,7 @@ def curveFaces(obj1, obj2):
 
 def setNumPoints():
     global density
-    density = cmds.intSliderGrp('density', q=Ture, v-True)
+    density = cmds.intSliderGrp('density', q=True, v=True)
 
 
 
@@ -154,12 +165,81 @@ def setNumPoints():
 
 ##########################################   Helper Functions   ###########################################
 
-def generatePointCloud(pair):
-    startPoint = pair[0]
-    endPoint = pair[1]
-
+def generatePointCloud(planeEq, POP, radius):
+    # POP = point on plane
+    global density
+    spawnPoint = []
+    for axes in range(len(POP)):    
+        # Moving the start point along normal
+        spawnPoint.append(POP[axes] + (planeEq[axes] * 0.3))
     
+    pointCloud = []
+    point = []
+    while len(pointCloud) < density:
+        # Generate random point to send new curve to (within specified radius)
+        x = rnd.uniform((-1*(radius[0]/2.0)), (radius[0]/2.0))
+        y = rnd.uniform((-1*(radius[1]/2.0)), (radius[1]/2.0))
+        z = rnd.uniform((-1*(radius[2]/2.0)), (radius[2]/2.0))
+        point = [POP[0] + x, POP[1] + y, POP[2]+z]
+        
+        POI = findIntersect(planeEq, spawnPoint, POP, point)
+        if POI:
+            pointCloud.append(POI)
+        else:
+            continue
 
+    return pointCloud
+
+
+
+def findIntersect(planeEq, startPoint, POP, endPoint):
+    # Check to see if the curve intersected the face
+    vecStart = convertToVec(startPoint, POP)
+    vecEnd = convertToVec(endPoint, POP)
+    kStart = (planeEq[0]*vecStart[0])+(planeEq[1]*vecStart[1])+(planeEq[2]*vecStart[2])
+    kEnd = (planeEq[0]*vecEnd[0])+(planeEq[1]*vecEnd[1])+(planeEq[2]*vecEnd[2])
+    if(((kStart>=0.0) and (kEnd>=0.0)) or ((kStart<=0.0) and (kEnd<=0.0))):
+        #Same side of plane, did not intersect
+        return
+    else:
+        # Intersected, find intersection point and add to pointCloud
+        tValue = getTValue(planeEq, startPoint, endPoint)
+        if tValue == False:
+            print ("denom zero")
+        else:
+            # Sub t into line equation to get intersection point
+            POI = [0.0, 0.0, 0.0]
+            POI[0] = startPoint[0] + (tValue * (endPoint[0] - startPoint[0]))
+            POI[1] = startPoint[1] + (tValue * (endPoint[1] - startPoint[1]))
+            POI[2] = startPoint[2] + (tValue * (endPoint[2] - startPoint[2]))
+            return POI
+
+
+def getTValue(pEq, PtA, PtB):
+    denEq = 0.0
+    nomEq = 0.0
+    denEq=(pEq[0]*(PtA[0]-PtB[0]))+(pEq[1]*(PtA[1]-PtB[1]))+(pEq[2]*(PtA[2]-PtB[2]))
+    
+    if(abs(denEq) < ZV):
+        print ("Denominator is Zero")
+        return False
+        
+    nomEq = (pEq[0] * PtA[0]) + (pEq[1] * PtA[1]) + (pEq[2] * PtA[2]) + pEq[3]
+    return(nomEq/denEq)
+
+
+def getPlaneEq(vertex, normal):
+    planeEq = [0.0, 0.0, 0.0, 0.0]
+    planeEq[0] = normal[0] 
+    planeEq[1] = normal[1]
+    planeEq[2] = normal[2]
+    planeEq[3] = 0 - (planeEq[0]*vertex[0] + planeEq[1]*vertex[1] + planeEq[2]*vertex[2])
+    # Check if they are colinear
+    if((abs(planeEq[0]) < ZV) and (abs(planeEq[1]) < ZV) and (abs(planeEq[2]) < ZV)):
+        print("Error Points are Colinear")
+        return False
+        
+    return planeEq
 
 
 def matrixMult(Mtx, Pt):
