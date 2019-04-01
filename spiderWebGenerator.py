@@ -122,8 +122,6 @@ def curveFaces(obj1, obj2):
         if dp < 0:
             # Center (for hang)
             midPoint = [0.0, 0.0, 0.0]
-            print item[1]
-            print item[3]
             midPoint[0] =  item[1][0] + (0.5 * (item[3][0] -item[1][0]))
             midPoint[1] =  item[1][1] + (0.5 * (item[3][1] -item[1][1]))
             midPoint[2] =  item[1][2] + (0.5 * (item[3][2] -item[1][2]))
