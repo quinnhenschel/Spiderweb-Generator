@@ -18,9 +18,11 @@ myWin = cmds.window(title="Spider Web Generator", menuBar=True)
 cmds.columnLayout(rowSpacing=20)
 cmds.picture(image="F:\Desktop\webs\spiderWebs.png", h= 250, w=200)
 cmds.intSliderGrp('density',l="Web Density", f=True, min=1, max=10, value=1)
-cmds.intSliderGrp('hangAmount', l="Amount of Hang", f=True, min=1, max=5, value=1)
+cmds.intSliderGrp('hangAmount', l="Amount of Hang", f=True, min=1, max=20, value=1)
 cmds.intSliderGrp('webIntricacy', l="Web Intricacy", f=True, min=1, max=5, value=1)
 cmds.button(label="Create Webs", command=('generateWebs()'))
+cmds.button(label="Generate Geometry", command=('generateGeometry()'), align='center', height=50)
+
 #cmds.setParent( '..' )
 #cmds.setParent( '..' )
 
@@ -38,6 +40,16 @@ def generateWebs():
     createCurve(pairs)
 
 
+def generateGeometry():
+    webCurves = determineSelectedCurves()
+    stringThickness = 0.002  
+    cmds.circle(nr=(0, 0, 0), c=(0, 0, 0), sw=360, r=stringThickness, n='webExtrudeMap')
+    circleGeo = 'webExtrudeMap'
+    
+    for web in webCurves:
+        cmds.extrude(circleGeo, web, ch=True, rn=False, po=1, et=2, ucp=1, fpt=1, upn=1, rotation=0, scale=1, rsp=1)
+
+    #need to add a check here to flip normals if they are going the wrong way (in instead of out)
 
 
 ##########################################    Setup Functions   ###########################################
@@ -59,6 +71,21 @@ def determineSelectedObjects():
         print ('Too many shapes. Only first two will be used.')
         meshList = meshList[0:2]
     return meshList
+    
+    
+def determineSelectedCurves():
+    selectedCurves = cmds.ls(selection=True)
+    curveList = []
+    for shape in selectedCurves:
+        if(cmds.objectType(shape) == 'transform'):
+            childShape = cmds.listRelatives(shape, fullPath=True, shapes=True)
+        if(cmds.objectType(childShape) == 'nurbsCurve'):
+            curveList.append(shape)
+      
+    if len(curveList) < 1:
+        print ('Not enough curves selected.')
+
+    return curveList
 
 
 def findFaces(mesh):
@@ -136,9 +163,20 @@ def curveFaces(obj1, obj2):
 
 
 def createCurve(pairs):
-    for pair in pairs:
-        cmds.curve(bez=True, degree=3, p=[pair[0], pair[0], pair[2], pair[2], pair[2], pair[1], pair[1]], k=[0,0,0,1,1,1,2,2,2])
+    global nextWebId
+    hangAmount = cmds.intSliderGrp('hangAmount', q=True, v=True)
+    hangAmount = float(hangAmount)/8
 
+
+    for pair in pairs:
+        ns = "Web" + str(nextWebId)
+        cmds.curve(degree=3, ep=[pair[0], pair[2], pair[1]], n=ns)
+        cmds.select(ns + ".ep[1]")
+        cmds.move(0.0, -hangAmount/1.5, 0.0, r=True)
+        cmds.select(ns + ".cv[1]",ns + ".cv[3]")
+        cmds.move(0.0, -hangAmount, 0.0, r=True)
+        
+        nextWebId = nextWebId + 1
 
 
 
@@ -155,7 +193,7 @@ def matrixMult(Mtx, Pt):
     PtOut[3] =(Mtx[3]*PtIn[0])+(Mtx[7]*PtIn[1])+(Mtx[11]*PtIn[2])+(Mtx[15]*PtIn[3])
     return(PtOut)
 
-
+ 
 def getMagnitude(vec):
     value = 0
     for item in vec:
