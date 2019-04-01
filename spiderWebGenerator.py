@@ -34,7 +34,7 @@ def generateWebs():
     meshes = determineSelectedObjects()
     obj1 = findFaces(meshes[0])     # Returns list of faces as [face normal, center, vertexA, vtxB, vtxC, vtxD]
     obj2 = findFaces(meshes[1])
-    pairs = curveFaces(obj1, obj2)  # Return list if start/end potential pairs as [distance, start point, end point]
+    pairs = curveFaces(obj1, obj2)  # Return list if start/end potential pairs as [start point, end point, midpoint]
     createCurve(pairs)
 
 
@@ -77,19 +77,19 @@ def findFaces(mesh):
         vtxA = cmds.getAttr(mesh + ".vt[" + vtxIdx[0] + "]")   
         vtxB = cmds.getAttr(mesh + ".vt[" + vtxIdx[1] + "]")
         vtxC = cmds.getAttr(mesh + ".vt[" + vtxIdx[2] + "]")
-        vtxD = cmds.getAttr(mesh + ".vt[" + vtxIdx[3] + "]")
+        #vtxD = cmds.getAttr(mesh + ".vt[" + vtxIdx[3] + "]")
         
         #Make each vertex a list    
         vtxA = list(vtxA[0])
         vtxB = list(vtxB[0])
         vtxC = list(vtxC[0])
-        vtxD = list(vtxD[0])
+        #vtxD = list(vtxD[0])
         
         # Multiply verticies by transform matrix (convert to world space)
         vtxA = matrixMult(meshTransform, vtxA)
         vtxB = matrixMult(meshTransform, vtxB)
         vtxC = matrixMult(meshTransform, vtxC)
-        vtxD = matrixMult(meshTransform, vtxD)
+        #vtxD = matrixMult(meshTransform, vtxD)
 
         normal = getNormal(vtxA, vtxB, vtxC)
 
@@ -98,7 +98,7 @@ def findFaces(mesh):
         cmds.setToolTo('moveSuperContext')
         centerPos = cmds.manipMoveContext('Move', q=True, p=True)
 
-        faceInfo = [normal, centerPos, vtxA[:3], vtxB[:3], vtxC[:3], vtxD[:3]]
+        faceInfo = [normal, centerPos, vtxA[:3], vtxB[:3], vtxC[:3]]
         faces.append(faceInfo)
     return faces
 
@@ -144,25 +144,6 @@ def createCurve(pairs):
 
 
 ##########################################   Helper Functions   ###########################################
-
-def showControlPoints(controlPoints):
-    # Displays controls points as locators in the scene
-    for point in controlPoints:
-        cmds.spaceLocator(p=(point))
-
-def factorial(nValue): 
-    # Calculates all numbers from 1 to nValue multiplied together, n!
-    fValue = 1.0
-    for i in range(1, nValue):
-        fValue *= float(i)
-    return fValue
-
-
-def binomialCoeff(nVlaue, kValue):
-    # n! / k! * (n-k) !
-    if (kValue == 0):
-        return 1.0
-    return (factorial(nVlaue)/ (factorial(kValue) * factorial(nVlaue - kValue)))
 
 
 def matrixMult(Mtx, Pt):
