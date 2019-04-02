@@ -208,7 +208,6 @@ def findIntersect(planeEq, startPoint, POP, endPoint):
     vecEnd = convertToVec(endPoint, POP)
     kStart = (planeEq[0]*vecStart[0])+(planeEq[1]*vecStart[1])+(planeEq[2]*vecStart[2])
     kEnd = (planeEq[0]*vecEnd[0])+(planeEq[1]*vecEnd[1])+(planeEq[2]*vecEnd[2])
-    print kStart, kEnd
 
     if(((kStart>0.0) and (kEnd>0.0)) or ((kStart<0.0) and (kEnd<0.0))):
         #Same side of plane, did not intersect
