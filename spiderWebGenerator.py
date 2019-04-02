@@ -45,7 +45,7 @@ def createCurve(pairs):
 
     for pair in pairs:
         for i in range (0, density):
-
+            print "Creating Web"
             # Midpoint of curve (for hang)
             midPoint = [0.0, 0.0, 0.0]
         
@@ -111,24 +111,21 @@ def findFaces(mesh):
         #vtxD = matrixMult(meshTransform, vtxD)
 
         normal = getNormal(vtxA, vtxB, vtxC)
-        planeEq = getPlaneEq(vtxA, normal)
 
         # Getting center of the face by querying the position of the move manipulator
         cmds.select(faceName)
         cmds.setToolTo('moveSuperContext')
         centerPos = cmds.manipMoveContext('Move', q=True, p=True)
 
-        # Getting point cloud
         radius = [0.0 ,0.0, 0.0]
-        points = []
         vecAB = convertToVec(vtxA, vtxB)
         vecAC = convertToVec(vtxA, vtxC)
         for axes in range(0, len(vecAB)):
             radius[axes] = ((vecAB[axes] + vecAC[axes])/ 2.0)
-        points = generatePointCloud(planeEq, centerPos, radius)
 
-        faceInfo = [normal, centerPos, points]
+        faceInfo = [normal, centerPos, radius]
         faces.append(faceInfo)
+    print "Got faces"
     return faces
 
 
@@ -141,6 +138,7 @@ def curveFaces(obj1, obj2):
             distance = convertToVec(start[1], end[1])
             distance = getMagnitude(distance)
             distance = [distance, start[1], start[0], end[1], end[0], start[2], end[2]]
+            # distance = [distance, start center, start normal, end center, end normal, start radius, end radius]
             tmp.append(distance)
         tmp.sort()
         distances.append(tmp[0])
@@ -149,9 +147,16 @@ def curveFaces(obj1, obj2):
     for item in distances:
         dp = getDotProduct(item[2], item[4])
         if dp < 0:
-            pair = [item[5], item[6]]
+            # Getting point cloud
+            startPE = getPlaneEq(item[1], item[2])
+            startPoints = generatePointCloud(startPE, item[1], item[5])
+            endPE = getPlaneEq(item[3], item[4])
+            endPoint = generatePointCloud(endPE, item[3], item[6])
+
+            pair = [startPoints, endPoint]
             pairs.append(pair)
-         
+    
+    print "Got pairs"
     return pairs
 
 
@@ -167,23 +172,28 @@ def setNumPoints():
 
 def generatePointCloud(planeEq, POP, radius):
     # POP = point on plane
+    print "Generating Point Cloud"
     global density
+    global tick 
+    tick = 0
     spawnPoint = []
     for axes in range(len(POP)):    
         # Moving the start point along normal
         spawnPoint.append(POP[axes] + (planeEq[axes] * 0.3))
-    
+
     pointCloud = []
     point = []
     while len(pointCloud) < density:
+        print "new point"
         # Generate random point to send new curve to (within specified radius)
         x = rnd.uniform((-1*(radius[0]/2.0)), (radius[0]/2.0))
         y = rnd.uniform((-1*(radius[1]/2.0)), (radius[1]/2.0))
         z = rnd.uniform((-1*(radius[2]/2.0)), (radius[2]/2.0))
         point = [POP[0] + x, POP[1] + y, POP[2]+z]
-        
+
         POI = findIntersect(planeEq, spawnPoint, POP, point)
         if POI:
+            print "Found POI"
             pointCloud.append(POI)
         else:
             continue
@@ -198,8 +208,11 @@ def findIntersect(planeEq, startPoint, POP, endPoint):
     vecEnd = convertToVec(endPoint, POP)
     kStart = (planeEq[0]*vecStart[0])+(planeEq[1]*vecStart[1])+(planeEq[2]*vecStart[2])
     kEnd = (planeEq[0]*vecEnd[0])+(planeEq[1]*vecEnd[1])+(planeEq[2]*vecEnd[2])
-    if(((kStart>=0.0) and (kEnd>=0.0)) or ((kStart<=0.0) and (kEnd<=0.0))):
+    print kStart, kEnd
+
+    if(((kStart>0.0) and (kEnd>0.0)) or ((kStart<0.0) and (kEnd<0.0))):
         #Same side of plane, did not intersect
+        print "same side"
         return
     else:
         # Intersected, find intersection point and add to pointCloud
