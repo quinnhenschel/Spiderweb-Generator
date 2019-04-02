@@ -20,25 +20,14 @@ cmds.columnLayout(rowSpacing=20, adjustableColumn=True)
 cmds.picture(image="F:\Desktop\webs\spiderWebs.png", h= 440, w=500)
 cmds.intSliderGrp('density',l="Web Density", f=True, min=1, max=10, value=1)
 cmds.intSliderGrp('hangAmount', l="Amount of Hang", f=True, min=1, max=5, value=1)
-cmds.intSliderGrp('webIntricacy', l="Web Intricacy", f=True, min=1, max=5, value=1)
+cmds.intSliderGrp('webIntricacy', l="Web Intricacy", f=True, min=1, max=20, value=1)
 cmds.button(label="Create Webs", command=('generateWebs()'), align='center', height=50)
-cmds.button(label="Generate Geometry", command=('generateGeometry(webCurve)'), align='center', height=50)
+cmds.button(label="Generate Geometry", command=('generateGeometry()'), align='center', height=50)
 cmds.showWindow(myWin)
 
 
 
 ##########################################    Doing The Thing    ###########################################
-#this is just here right now to make a curve for generateGeometry to use before we impliment our functionality to add curves
-webCurve = cmds.circle(nr=(0, 0, 1), c=(0, 0, 0), sw=160, r=0.3, n='webCurveMap')
-webCurve = 'webCurveMap'
-def generateGeometry(webCurve):
-    stringThickness = 0.002  
-    cmds.circle(nr=(0, 0, 0), c=(0, 0, 0), sw=360, r=stringThickness, n='webExtrudeMap')
-    circleGeo = 'webExtrudeMap'
-    cmds.extrude(circleGeo, webCurve, ch=True, rn=False, po=1, et=2, ucp=1, fpt=1, upn=1, rotation=0, scale=1, rsp=1)
-
-    #need to add a check here to flip normals if they are going the wrong way (in instead of out)
-    
     
 def generateWebs():
     setNumPoints()
@@ -48,9 +37,22 @@ def generateWebs():
     pairs = curveFaces(obj1, obj2)  # Return list of start/end potential pairs as [startPointCloud, endPointCloud, midpoint]
     createCurve(pairs)
 
+def generateGeometry():
+    webCurves = determineSelectedCurves()
+    stringThickness = 0.002  
+    cmds.circle(nr=(0, 0, 0), c=(0, 0, 0), sw=360, r=stringThickness, n='webExtrudeMap')
+    circleGeo = 'webExtrudeMap'
+    
+    for web in webCurves:
+        cmds.extrude(circleGeo, web, ch=True, rn=False, po=1, et=2, ucp=1, fpt=1, upn=1, rotation=0, scale=1, rsp=1)
+
+    #need to add a check here to flip normals if they are going the wrong way (in instead of out)
 
 def createCurve(pairs):
     global nextWebId
+    hangAmount = cmds.intSliderGrp('hangAmount', q=True, v=True)
+    hangAmount = float(hangAmount)/8
+
 
     for pair in pairs:
         for i in range (0, density):
@@ -64,6 +66,11 @@ def createCurve(pairs):
 
             ns = "Web" + str(nextWebId)
             cmds.curve(degree=3, ep=[pair[0][i], midPoint, pair[1][i]], n=ns)
+   
+            cmds.select(ns + ".ep[1]")
+            cmds.move(0.0, -hangAmount/1.5, 0.0, r=True)
+            cmds.select(ns + ".cv[1]",ns + ".cv[3]")
+            cmds.move(0.0, -hangAmount, 0.0, r=True)
             
             nextWebId = nextWebId + 1
 
@@ -88,6 +95,21 @@ def determineSelectedObjects():
         print ('Too many shapes. Only first two will be used.')
         meshList = meshList[0:2]
     return meshList
+    
+    
+def determineSelectedCurves():
+    selectedCurves = cmds.ls(selection=True)
+    curveList = []
+    for shape in selectedCurves:
+        if(cmds.objectType(shape) == 'transform'):
+            childShape = cmds.listRelatives(shape, fullPath=True, shapes=True)
+        if(cmds.objectType(childShape) == 'nurbsCurve'):
+            curveList.append(shape)
+      
+    if len(curveList) < 1:
+        print ('Not enough curves selected.')
+
+    return curveList
 
 
 def findFaces(mesh):
