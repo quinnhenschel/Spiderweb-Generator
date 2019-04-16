@@ -19,22 +19,15 @@ if 'nextWebId' not in globals():
 myWin = cmds.window(title="Spider Web Generator", menuBar=True)
 
 cmds.columnLayout(rowSpacing=20, adjustableColumn=True)
-cmds.picture(image="F:\Desktop\webs\spiderWebs.png", h= 440, w=500)
+cmds.picture(image="C:\Users\qhens\OneDrive\Desktop\Spiderweb-Generator\spiderWebs.png", h= 440, w=500)
 cmds.intSliderGrp('density',l="Web Density", f=True, min=1, max=10, value=1)
 cmds.intSliderGrp('hangAmount', l="Amount of Hang", f=True, min=1, max=20, value=1)
 cmds.intSliderGrp('webIntricacy', l="Web Intricacy", f=True, min=1, max=5, value=1)
 cmds.intSliderGrp('random', l="Random Factor", f=True, min=0, max=10, value=1)               
 cmds.button(label="Create Webs", command=('generateWebs()'), align='center', height=50)
+cmds.intSliderGrp('stringThickness', l="Strand Thickness", f=True, min=0, max=10, value=1)               
 cmds.button(label="Generate Geometry", command=('generateGeometry()'), align='center', height=50)
 cmds.showWindow(myWin)
-
-
-
-
-
-
-
-
 
 
 
@@ -54,13 +47,19 @@ def generateWebs():
 
 def generateGeometry():
     webCurves = determineSelectedCurves()
-    stringThickness = 0.002  
+    stringThickness = cmds.intSliderGrp('stringThickness', q=True, v=True)
+    stringThickness = float(stringThickness)
+    stringThickness = 0.001 * stringThickness 
+    print stringThickness
     cmds.circle(nr=(0, 0, 0), c=(0, 0, 0), sw=360, r=stringThickness, n='webExtrudeMap')
     circleGeo = 'webExtrudeMap'
     
     for web in webCurves:
-        cmds.extrude(circleGeo, web, ch=True, rn=False, po=1, et=2, ucp=1, fpt=1, upn=1, rotation=0, scale=1, rsp=1)
+        cmds.insertKnotCurve(web, ch=True, p=(0, 1, 2), nk=3, ib=True, rpo=True)
+        cmds.extrude(circleGeo, web, ch=True, rn=False, po=3, et=2, ucp=1, fpt=1, upn=1, rotation=0, scale=1, rsp=1)
+        cmds.delete(web)
 
+    cmds.delete(circleGeo)
     #need to add a check here to flip normals if they are going the wrong way (in instead of out)
 
 def createCurve(pairs):
