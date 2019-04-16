@@ -1,7 +1,9 @@
 import maya.cmds as cmds
 import random as rnd
 import math
-ZV = 0.000000000000000000001  # Zero value to compare against
+
+# Definitions
+ZV = 0.000000000000000000001  
 rnd.seed()
 
 if 'myWin' in globals():
@@ -21,20 +23,33 @@ cmds.picture(image="F:\Desktop\webs\spiderWebs.png", h= 440, w=500)
 cmds.intSliderGrp('density',l="Web Density", f=True, min=1, max=10, value=1)
 cmds.intSliderGrp('hangAmount', l="Amount of Hang", f=True, min=1, max=20, value=1)
 cmds.intSliderGrp('webIntricacy', l="Web Intricacy", f=True, min=1, max=5, value=1)
+cmds.intSliderGrp('random', l="Random Factor", f=True, min=0, max=10, value=1)               
 cmds.button(label="Create Webs", command=('generateWebs()'), align='center', height=50)
 cmds.button(label="Generate Geometry", command=('generateGeometry()'), align='center', height=50)
 cmds.showWindow(myWin)
 
 
 
-##########################################    Doing The Thing    ###########################################
+
+
+
+
+
+
+
+
+
+##########################################    High Level Procedures    ###########################################
     
 def generateWebs():
-    setNumPoints()
+    setDensity()
+    setRandomness()
     meshes = determineSelectedObjects()
-    obj1 = findFaces(meshes[0])     # Returns list of faces as [face normal, center, pointCloud]
+    """ obj1/2 = list of faces as [face normal, center, pointCloud] """
+    obj1 = findFaces(meshes[0])     
     obj2 = findFaces(meshes[1])
-    pairs = curveFaces(obj1, obj2)  # Return list of start/end potential pairs as [startPointCloud, endPointCloud, midpoint]
+    """ pairs = list of start/end potential pairs as [startPointCloud, endPointCloud, midpoint] """
+    pairs = curveFaces(obj1, obj2)  
     createCurve(pairs)
 
 def generateGeometry():
@@ -50,36 +65,54 @@ def generateGeometry():
 
 def createCurve(pairs):
     global nextWebId
+   
     hangAmount = cmds.intSliderGrp('hangAmount', q=True, v=True)
     hangAmount = float(hangAmount)/8
-
+    print "base", hangAmount
 
     for pair in pairs:
         for i in range (0, density):
-            print "Creating Web"
-            # Midpoint of curve (for hang)
+            randomize = tick()
+            ns = "Web" + str(nextWebId)
+
+            """ Midpoint of curve for hang """
             midPoint = [0.0, 0.0, 0.0]
-        
             midPoint[0] = pair[0][i][0] + (0.5 * (pair[1][i][0] - pair[0][i][0]))
             midPoint[1] = pair[0][i][1] + (0.5 * (pair[1][i][1] - pair[0][i][1]))
             midPoint[2] = pair[0][i][2] + (0.5 * (pair[1][i][2] - pair[0][i][2]))
-
-            ns = "Web" + str(nextWebId)
+        
             cmds.curve(degree=3, ep=[pair[0][i], midPoint, pair[1][i]], n=ns)
-   
-            cmds.select(ns + ".ep[1]")
-            cmds.move(0.0, -hangAmount/1.5, 0.0, r=True)
-            cmds.select(ns + ".cv[1]",ns + ".cv[3]")
-            cmds.move(0.0, -hangAmount, 0.0, r=True)
+
+            if randomize:
+                hang = randomizeMe(hangAmount, hangAmount + 2)
+            else:
+                hang = hangAmount
             
+            cmds.select(ns + ".ep[1]")
+            cmds.move(0.0, -hang/1.5, 0.0, r=True)
+            cmds.select(ns + ".cv[1]",ns + ".cv[3]")
+            cmds.move(0.0, -hang, 0.0, r=True)
+            
+            #validateCurve()
+
             nextWebId = nextWebId + 1
+    print "Curves created"
 
 
 
-##########################################    Setup Functions   ###########################################
+
+
+
+
+
+
+
+
+
+##########################################    General Procedures   ###########################################
 
 def determineSelectedObjects():
-    # Create a list of all selected shapes
+    """ Create a list of all selected shapes """
     selectedShapes = cmds.ls(selection=True)
     meshList = []
     for shape in selectedShapes:
@@ -88,12 +121,13 @@ def determineSelectedObjects():
         if(cmds.objectType(childShape) == 'mesh'):
             meshList.append(shape)
 
-    # Adjusting mesh list so it's only first 2 objects used        
+    # This to be taken out/adjusted for when we're ready for multiple shapes      
     if len(meshList) < 2:
         print ('Not enough shapes selected.')
     elif len(meshList) > 2:
         print ('Too many shapes. Only first two will be used.')
         meshList = meshList[0:2]
+
     return meshList
     
     
@@ -123,31 +157,29 @@ def findFaces(mesh):
         vtxLst = cmds.polyInfo(faceName, faceToVertex=True) 
         vtxIdx = str(vtxLst[0]).split()
         vtxIdx = vtxIdx[2:]
-        # Vertex positions
+        """ Vertex positions """
         vtxA = cmds.getAttr(mesh + ".vt[" + vtxIdx[0] + "]")   
         vtxB = cmds.getAttr(mesh + ".vt[" + vtxIdx[1] + "]")
         vtxC = cmds.getAttr(mesh + ".vt[" + vtxIdx[2] + "]")
-        #vtxD = cmds.getAttr(mesh + ".vt[" + vtxIdx[3] + "]")
         
-        #Make each vertex a list    
+        """ Make each vertex a list """
         vtxA = list(vtxA[0])
         vtxB = list(vtxB[0])
         vtxC = list(vtxC[0])
-        #vtxD = list(vtxD[0])
         
-        # Multiply verticies by transform matrix (convert to world space)
+        """ Multiply verticies by transform matrix (convert to world space) """
         vtxA = matrixMult(meshTransform, vtxA)
         vtxB = matrixMult(meshTransform, vtxB)
         vtxC = matrixMult(meshTransform, vtxC)
-        #vtxD = matrixMult(meshTransform, vtxD)
 
         normal = getNormal(vtxA, vtxB, vtxC)
 
-        # Getting center of the face by querying the position of the move manipulator
+        """ Getting center of the face by querying the position of the move manipulator """
         cmds.select(faceName)
         cmds.setToolTo('moveSuperContext')
         centerPos = cmds.manipMoveContext('Move', q=True, p=True)
 
+        """ Get range around center to place start/end point at """
         radius = [0.0 ,0.0, 0.0]
         vecAB = convertToVec(vtxA, vtxB)
         vecAC = convertToVec(vtxA, vtxC)
@@ -161,96 +193,125 @@ def findFaces(mesh):
 
 
 def curveFaces(obj1, obj2):
-    #Finds faces with opposite normals and close in distance
+    """ Finds faces with opposite normals and close in distance """
     distances = []
     for start in obj1:
         tmp = []
         for end in obj2:
             distance = convertToVec(start[1], end[1])
             distance = getMagnitude(distance)
+            """ distance = [distance, start center, start normal, end center, end normal, start radius, end radius] """
             distance = [distance, start[1], start[0], end[1], end[0], start[2], end[2]]
-            # distance = [distance, start center, start normal, end center, end normal, start radius, end radius]
             tmp.append(distance)
         tmp.sort()
+        """ Selecting faces closest together, should expand this for randomization """
         distances.append(tmp[0])
 
     pairs = []
     for item in distances:
         dp = getDotProduct(item[2], item[4])
         if dp < 0:
-            # Getting point cloud
+            """ Getting point cloud """
             startPE = getPlaneEq(item[1], item[2])
             startPoints = generatePointCloud(startPE, item[1], item[5])
             endPE = getPlaneEq(item[3], item[4])
-            endPoint = generatePointCloud(endPE, item[3], item[6])
+            endPoints = generatePointCloud(endPE, item[3], item[6])
 
-            pair = [startPoints, endPoint]
+            pair = [startPoints, endPoints]
             pairs.append(pair)
     
     print "Got pairs"
     return pairs
 
-
-def setNumPoints():
+def setDensity():
     global density
     density = cmds.intSliderGrp('density', q=True, v=True)
 
+def setRandomness():
+    global randomValue, randomTick
+    randomValue = cmds.intSliderGrp('random', q=True, v=True)
+    randomTick = 0 #(maxValue + 1) - randomValue
 
 
 
 
-##########################################   Helper Functions   ###########################################
+
+
+
+
+
+
+
+
+
+
+
+##########################################   Base Procedures   ###########################################
+
+# def validateCurve():
+
+def tick():
+    global randomTick, randomValue
+    maxValue = cmds.intSliderGrp('random', q=True, max=True)
+    if randomTick >= (maxValue - randomValue)/2.5:
+        randomTick = 0
+        return True
+    else:
+        randomTick += 1
+        return False
+
+
+def randomizeMe(value, seed):
+    newValue = value * rnd.uniform(1.0, seed)
+    return newValue
+
 
 def generatePointCloud(planeEq, POP, radius):
-    # POP = point on plane
-    print "Generating Point Cloud"
     global density
-    global tick 
-    tick = 0
     spawnPoint = []
+
     for axes in range(len(POP)):    
-        # Moving the start point along normal
-        spawnPoint.append(POP[axes] + (planeEq[axes] * 0.3))
+        """ Moving the start point (POP) off of face along the normal """
+        spawnPoint.append(POP[axes] + (planeEq[axes] * 0.3))    
 
     pointCloud = []
     point = []
     while len(pointCloud) < density:
-        print "new point"
-        # Generate random point to send new curve to (within specified radius)
+        """ Generate random point to send new curve to """
         x = rnd.uniform((-1*(radius[0]/2.0)), (radius[0]/2.0))
         y = rnd.uniform((-1*(radius[1]/2.0)), (radius[1]/2.0))
         z = rnd.uniform((-1*(radius[2]/2.0)), (radius[2]/2.0))
         point = [POP[0] + x, POP[1] + y, POP[2]+z]
 
+        """  Check that the line intersects the plane """
         POI = findIntersect(planeEq, spawnPoint, POP, point)
         if POI:
-            print "Found POI"
             pointCloud.append(POI)
         else:
             continue
-
+    
     return pointCloud
 
 
 
 def findIntersect(planeEq, startPoint, POP, endPoint):
-    # Check to see if the curve intersected the face
-    vecStart = convertToVec(startPoint, POP)
+    """  Check to see if the curve intersected the plane """
+    vecStart = convertToVec(startPoint, POP) 
     vecEnd = convertToVec(endPoint, POP)
     kStart = (planeEq[0]*vecStart[0])+(planeEq[1]*vecStart[1])+(planeEq[2]*vecStart[2])
     kEnd = (planeEq[0]*vecEnd[0])+(planeEq[1]*vecEnd[1])+(planeEq[2]*vecEnd[2])
 
     if(((kStart>0.0) and (kEnd>0.0)) or ((kStart<0.0) and (kEnd<0.0))):
-        #Same side of plane, did not intersect
+        """ Same side of plane, did not intersect """
         print "same side"
         return
     else:
-        # Intersected, find intersection point and add to pointCloud
+        """  Intersected, find intersection point and add to pointCloud """
         tValue = getTValue(planeEq, startPoint, endPoint)
         if tValue == False:
             print ("denom zero")
         else:
-            # Sub t into line equation to get intersection point
+            """  Sub t into line equation to get intersection point """
             POI = [0.0, 0.0, 0.0]
             POI[0] = startPoint[0] + (tValue * (endPoint[0] - startPoint[0]))
             POI[1] = startPoint[1] + (tValue * (endPoint[1] - startPoint[1]))
@@ -277,7 +338,7 @@ def getPlaneEq(vertex, normal):
     planeEq[1] = normal[1]
     planeEq[2] = normal[2]
     planeEq[3] = 0 - (planeEq[0]*vertex[0] + planeEq[1]*vertex[1] + planeEq[2]*vertex[2])
-    # Check if they are colinear
+    """  Check if they are colinear """
     if((abs(planeEq[0]) < ZV) and (abs(planeEq[1]) < ZV) and (abs(planeEq[2]) < ZV)):
         print("Error Points are Colinear")
         return False
@@ -287,7 +348,8 @@ def getPlaneEq(vertex, normal):
 
 def matrixMult(Mtx, Pt):
     PtOut = [0.0, 0.0, 0.0, 0.0]
-    PtIn = [Pt[0], Pt[1], Pt[2], 1] # Convert to Homogeneous Point
+    """  Convert to Homogeneous Point """
+    PtIn = [Pt[0], Pt[1], Pt[2], 1] 
     PtOut[0] =(Mtx[0]*PtIn[0])+(Mtx[4]*PtIn[1])+(Mtx[8]*PtIn[2])+(Mtx[12]*PtIn[3])
     PtOut[1] =(Mtx[1]*PtIn[0])+(Mtx[5]*PtIn[1])+(Mtx[9]*PtIn[2])+(Mtx[13]*PtIn[3])
     PtOut[2] =(Mtx[2]*PtIn[0])+(Mtx[6]*PtIn[1])+(Mtx[10]*PtIn[2])+(Mtx[14]*PtIn[3])
@@ -315,11 +377,11 @@ def getCrossProduct(v1, v2):
 
 
 def getNormal(VtxA, VtxB, VtxC):
-    #Convert to vectors
+    """ Convert to vectors """
     vBA = convertToVec(VtxB, VtxA)
     vCB = convertToVec(VtxC, VtxB)
   
-    #Cross Porduct
+    """ Cross Porduct """
     vNormal = getCrossProduct(vBA, vCB)
     magNormal = getMagnitude(vNormal)
     if(abs(magNormal) < ZV):
