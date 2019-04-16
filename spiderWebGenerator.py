@@ -59,7 +59,7 @@ def generateGeometry():
         #cmds.insertKnotCurve(web, p=(1), ch=True, nk=5, ib=True, rpo=True)
         """ Extrude circle curve along web curve to create geometry (po=0 is nurbs surface, po=1 is polygons, po=3 is bezier surface) """
         cmds.extrude(circleGeo, web, ch=True, rn=False, po=1, et=2, ucp=1, fpt=1, upn=1, rotation=0, scale=1, rsp=1, n='web')
-        #I switched it to NURBS surface instead of polygons because the verticies were getting messed up in some places. We could maybe tesselate them at the end if we want to (next line)
+        #with polygons the verticies are getting messed up in some places. We could maybe tesselate them at the end if we want to (next line)
         #cmds.nurbsToPoly(ch=True, f=2, n='web_GEO')
 
         cmds.delete(web)
@@ -71,7 +71,8 @@ def createCurve(pairs):
     global nextWebId
    
     """ Offset broken up into two pieces: L/R side of the middle control vertex. Not allowed to be below 0. """
-    hangOffset = cmds.intSliderGrp('hangOffset', q=True, v=True) 
+    hangOffset = cmds.intSliderGrp('hangOffset', q=True, v=True)
+    hangOffset = float(hangOffset) 
     offsetCV1 = (hangOffset * -1) / 3 
     offsetCV3 = hangOffset / 5
     if(offsetCV1 < 0):
@@ -105,9 +106,9 @@ def createCurve(pairs):
             cmds.select(ns + ".ep[1]")
             cmds.move(0.0, -hang/1.5, 0.0, r=True)
             cmds.select(ns + ".cv[1]")
-            cmds.move(0.0, -hang -offsetCV1, 0.0, r=True)
+            cmds.move(0.0, -hang - offsetCV1, 0.0, r=True)
             cmds.select(ns + ".cv[3]")
-            cmds.move(0.0, -hang -offsetCV3, 0.0, r=True)
+            cmds.move(0.0, -hang - offsetCV3, 0.0, r=True)
             
             #validateCurve()
 
