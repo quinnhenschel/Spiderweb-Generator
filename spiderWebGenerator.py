@@ -19,22 +19,16 @@ if 'nextWebId' not in globals():
 myWin = cmds.window(title="Spider Web Generator", menuBar=True)
 
 cmds.columnLayout(rowSpacing=20, adjustableColumn=True)
-cmds.picture(image="F:\Desktop\webs\spiderWebs.png", h= 440, w=500)
+cmds.picture(image="F:\Desktop\Spiderweb-Generator\spiderWebs.png", h= 440, w=500)
 cmds.intSliderGrp('density',l="Web Density", f=True, min=1, max=10, value=1)
 cmds.intSliderGrp('hangAmount', l="Amount of Hang", f=True, min=1, max=20, value=1)
+cmds.intSliderGrp('hangOffset', l="Hang Offset", f=True, min=-10, max=10, value=0)
 cmds.intSliderGrp('webIntricacy', l="Web Intricacy", f=True, min=1, max=5, value=1)
 cmds.intSliderGrp('random', l="Random Factor", f=True, min=0, max=10, value=1)               
 cmds.button(label="Create Webs", command=('generateWebs()'), align='center', height=50)
+cmds.intSliderGrp('stringThickness', l="Strand Thickness", f=True, min=1, max=20, value=1)               
 cmds.button(label="Generate Geometry", command=('generateGeometry()'), align='center', height=50)
 cmds.showWindow(myWin)
-
-
-
-
-
-
-
-
 
 
 
@@ -54,18 +48,38 @@ def generateWebs():
 
 def generateGeometry():
     webCurves = determineSelectedCurves()
-    stringThickness = 0.002  
+    stringThickness = cmds.intSliderGrp('stringThickness', q=True, v=True)
+    stringThickness = float(stringThickness)
+    stringThickness = 0.002 * stringThickness 
+    """ Create circle curve with radius based on stringThickness as webExtrudeMap """
     cmds.circle(nr=(0, 0, 0), c=(0, 0, 0), sw=360, r=stringThickness, n='webExtrudeMap')
     circleGeo = 'webExtrudeMap'
     
     for web in webCurves:
-        cmds.extrude(circleGeo, web, ch=True, rn=False, po=1, et=2, ucp=1, fpt=1, upn=1, rotation=0, scale=1, rsp=1)
+        #cmds.insertKnotCurve(web, p=(1), ch=True, nk=5, ib=True, rpo=True)
+        """ Extrude circle curve along web curve to create geometry (po=0 is nurbs surface, po=1 is polygons, po=3 is bezier surface) """
+        cmds.extrude(circleGeo, web, ch=True, rn=False, po=1, et=2, ucp=1, fpt=1, upn=1, rotation=0, scale=1, rsp=1, n='web')
+        #with polygons the verticies are getting messed up in some places. We could maybe tesselate them at the end if we want to (next line)
+        #cmds.nurbsToPoly(ch=True, f=2, n='web_GEO')
 
-    #need to add a check here to flip normals if they are going the wrong way (in instead of out)
+        cmds.delete(web)
+
+    cmds.delete(circleGeo)
+    #need to add a check here to flip normals if they are going the wrong way (in instead of out). Im honestly not sure how to do this but will come back
 
 def createCurve(pairs):
     global nextWebId
    
+    """ Offset broken up into two pieces: L/R side of the middle control vertex. Not allowed to be below 0. """
+    hangOffset = cmds.intSliderGrp('hangOffset', q=True, v=True)
+    hangOffset = float(hangOffset) 
+    offsetCV1 = (hangOffset * -1) / 3 
+    offsetCV3 = hangOffset / 5
+    if(offsetCV1 < 0):
+        offsetCV1 = 0
+    if(offsetCV3 < 0):
+        offsetCV3 = 0
+
     hangAmount = cmds.intSliderGrp('hangAmount', q=True, v=True)
     hangAmount = float(hangAmount)/8
     print "base", hangAmount
@@ -88,10 +102,13 @@ def createCurve(pairs):
             else:
                 hang = hangAmount
             
+            """ Midpoint (ep[1]), and control verticy to L/R of it (cv[1], cv[3]) moved down to create web hang. Moving cv[1] and cv[3] also determines offset"""
             cmds.select(ns + ".ep[1]")
             cmds.move(0.0, -hang/1.5, 0.0, r=True)
-            cmds.select(ns + ".cv[1]",ns + ".cv[3]")
-            cmds.move(0.0, -hang, 0.0, r=True)
+            cmds.select(ns + ".cv[1]")
+            cmds.move(0.0, -hang - offsetCV1, 0.0, r=True)
+            cmds.select(ns + ".cv[3]")
+            cmds.move(0.0, -hang - offsetCV3, 0.0, r=True)
             
             #validateCurve()
 
