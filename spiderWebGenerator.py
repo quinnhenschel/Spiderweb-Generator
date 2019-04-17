@@ -39,10 +39,10 @@ def generateWebs():
     setDensity()
     setRandomness()
     meshes = determineSelectedObjects()
-    """ obj1/2 = list of faces as [face normal, center, pointCloud] """
+    """ obj1/2 = list of faces as [face normal, center, radius] """
     obj1 = findFaces(meshes[0])     
     obj2 = findFaces(meshes[1])
-    """ pairs = list of start/end potential pairs as [startPointCloud, endPointCloud, midpoint] """
+    """ pairs = list of start/end potential pairs as [startPointCloud, endPointCloud1, EPC2, EPC3] """
     pairs = curveFaces(obj1, obj2)  
     createCurve(pairs)
 
@@ -68,8 +68,10 @@ def generateGeometry():
     #need to add a check here to flip normals if they are going the wrong way (in instead of out). Im honestly not sure how to do this but will come back
 
 def createCurve(pairs):
-    global nextWebId
-   
+    global nextWebId, density, maxRandom
+    hangTick = rnd.randint(0, maxRandom)
+    densityTick = rnd.randint(0, maxRandom)
+    
     """ Offset broken up into two pieces: L/R side of the middle control vertex. Not allowed to be below 0. """
     hangOffset = cmds.intSliderGrp('hangOffset', q=True, v=True)
     hangOffset = float(hangOffset) 
@@ -82,26 +84,36 @@ def createCurve(pairs):
 
     hangAmount = cmds.intSliderGrp('hangAmount', q=True, v=True)
     hangAmount = float(hangAmount)/8
-    print "base", hangAmount
 
     for pair in pairs:
-        for i in range (0, density):
-            randomize = tick()
+        """ For Randomizing amount of strings created from each face"""
+        randomizeDensity, densityTick = tick(densityTick)
+        if randomizeDensity:
+            densityAmount = randomizeMe(int(density*0.5), density * 2, True)
+        else:
+            densityAmount = density 
+
+        """ Loop to create x amount of webs per face """
+        for i in range (0, densityAmount):
+            endFace = rnd.randint(0, 2)
+            randomizeHang, hangTick = tick(hangTick)
             ns = "Web" + str(nextWebId)
 
             """ Midpoint of curve for hang """
+            
             midPoint = [0.0, 0.0, 0.0]
-            midPoint[0] = pair[0][i][0] + (0.5 * (pair[1][i][0] - pair[0][i][0]))
-            midPoint[1] = pair[0][i][1] + (0.5 * (pair[1][i][1] - pair[0][i][1]))
-            midPoint[2] = pair[0][i][2] + (0.5 * (pair[1][i][2] - pair[0][i][2]))
+            midPoint[0] = pair[0][i][0] + (0.5 * (pair[1][endFace][i][0] - pair[0][i][0]))
+            midPoint[1] = pair[0][i][1] + (0.5 * (pair[1][endFace][i][1] - pair[0][i][1]))
+            midPoint[2] = pair[0][i][2] + (0.5 * (pair[1][endFace][i][2] - pair[0][i][2]))
         
-            cmds.curve(degree=3, ep=[pair[0][i], midPoint, pair[1][i]], n=ns)
+            cmds.curve(degree=3, ep=[pair[0][i], midPoint, pair[1][endFace][i]], n=ns)
 
-            if randomize:
-                hang = randomizeMe(hangAmount, hangAmount + 2)
+            """ For randomizing the value of the hang """
+            if randomizeHang:
+                hang = randomizeMe(hangAmount, hangAmount + 2, False)
             else:
                 hang = hangAmount
-            
+
             """ Midpoint (ep[1]), and control verticy to L/R of it (cv[1], cv[3]) moved down to create web hang. Moving cv[1] and cv[3] also determines offset"""
             cmds.select(ns + ".ep[1]")
             cmds.move(0.0, -hang/1.5, 0.0, r=True)
@@ -196,7 +208,7 @@ def findFaces(mesh):
         cmds.setToolTo('moveSuperContext')
         centerPos = cmds.manipMoveContext('Move', q=True, p=True)
 
-        """ Get range around center to place start/end point at """
+        """ Get radius around center to place start/end point at """
         radius = [0.0 ,0.0, 0.0]
         vecAB = convertToVec(vtxA, vtxB)
         vecAC = convertToVec(vtxA, vtxC)
@@ -221,20 +233,40 @@ def curveFaces(obj1, obj2):
             distance = [distance, start[1], start[0], end[1], end[0], start[2], end[2]]
             tmp.append(distance)
         tmp.sort()
-        """ Selecting faces closest together, should expand this for randomization """
-        distances.append(tmp[0])
+        """ Selecting the closest 3 end faces to the start face """
+        temp = {
+            'startCenter': tmp[0][1], 
+            'startNrml': tmp[0][2], 
+            'startRadius': tmp[0][5], 
+            'endRadius': tmp[0][6], 
+            'endCenter1': tmp[0][3], 
+            'endNrml1': tmp[0][4], 
+            'endCenter2': tmp[1][3], 
+            'endNrml2': tmp[1][4], 
+            'endCenter3': tmp[2][3], 
+            'endNrml3': tmp[2][4]
+        }
+        distances.append(temp)
 
     pairs = []
-    for item in distances:
-        dp = getDotProduct(item[2], item[4])
-        if dp < 0:
-            """ Getting point cloud """
-            startPE = getPlaneEq(item[1], item[2])
-            startPoints = generatePointCloud(startPE, item[1], item[5])
-            endPE = getPlaneEq(item[3], item[4])
-            endPoints = generatePointCloud(endPE, item[3], item[6])
 
-            pair = [startPoints, endPoints]
+    for item in distances:
+        counter = 1
+        endPointsAll = []
+        while counter <= 3:
+            dp = getDotProduct(item['startNrml'], item['endNrml' + str(counter)])
+            if dp < 0:
+                """ Getting end point clouds """
+                endPE = getPlaneEq(item['endCenter'+ str(counter)], item['endNrml'+ str(counter)])
+                endPoints = generatePointCloud(endPE, item['endCenter'+ str(counter)], item['endRadius'])
+                endPointsAll.append(endPoints)
+            
+            counter += 1
+        if len(endPointsAll) == 3 :
+            """ Start point cloud """
+            startPE = getPlaneEq(item['startCenter'], item['startNrml'])
+            startPoints = generatePointCloud(startPE, item['startCenter'], item['startRadius'])
+            pair = [startPoints, endPointsAll]
             pairs.append(pair)
     
     print "Got pairs"
@@ -245,9 +277,10 @@ def setDensity():
     density = cmds.intSliderGrp('density', q=True, v=True)
 
 def setRandomness():
-    global randomValue, randomTick
+    global randomValue, maxRandom
+    maxRandom = cmds.intSliderGrp('random', q=True, max=True)
     randomValue = cmds.intSliderGrp('random', q=True, v=True)
-    randomTick = 0 #(maxValue + 1) - randomValue
+    
 
 
 
@@ -265,21 +298,24 @@ def setRandomness():
 
 ##########################################   Base Procedures   ###########################################
 
-# def validateCurve():
+def validateCurve():
+    print "x"
 
-def tick():
-    global randomTick, randomValue
-    maxValue = cmds.intSliderGrp('random', q=True, max=True)
-    if randomTick >= (maxValue - randomValue)/2.5:
-        randomTick = 0
-        return True
+def tick(tick):
+    global randomValue, maxRandom
+    if tick >= (maxRandom - randomValue)/2.5:
+        tick = 0
+        return True, tick
     else:
-        randomTick += 1
-        return False
+        tick += 1
+        return False, tick
 
 
-def randomizeMe(value, seed):
-    newValue = value * rnd.uniform(1.0, seed)
+def randomizeMe(value, seed, integer):
+    if integer:
+        newValue = rnd.randint(value, seed)
+    else:
+        newValue = value * rnd.uniform(0.5, seed)
     return newValue
 
 
@@ -293,11 +329,11 @@ def generatePointCloud(planeEq, POP, radius):
 
     pointCloud = []
     point = []
-    while len(pointCloud) < density:
+    while len(pointCloud) < density * 2:
         """ Generate random point to send new curve to """
-        x = rnd.uniform((-1*(radius[0]/2.0)), (radius[0]/2.0))
-        y = rnd.uniform((-1*(radius[1]/2.0)), (radius[1]/2.0))
-        z = rnd.uniform((-1*(radius[2]/2.0)), (radius[2]/2.0))
+        x = rnd.uniform((-1*radius[0]), radius[0])
+        y = rnd.uniform((-1*radius[1]), radius[1])
+        z = rnd.uniform((-1*radius[2]), radius[2])
         point = [POP[0] + x, POP[1] + y, POP[2]+z]
 
         """  Check that the line intersects the plane """
