@@ -23,7 +23,7 @@ cmds.picture(image="F:\Desktop\Spiderweb-Generator\spiderWebs.png", h= 440, w=50
 cmds.intSliderGrp('density',l="Web Density", f=True, min=1, max=10, value=1)
 cmds.intSliderGrp('hangAmount', l="Amount of Hang", f=True, min=1, max=20, value=1)
 cmds.intSliderGrp('hangOffset', l="Hang Offset", f=True, min=-10, max=10, value=0)
-cmds.intSliderGrp('webIntricacy', l="Web Intricacy", f=True, min=1, max=5, value=1)
+cmds.intSliderGrp('webIntricacy', l="Web Intricacy", f=True, min=0, max=10, value=1)
 cmds.intSliderGrp('random', l="Random Factor", f=True, min=0, max=10, value=1)               
 cmds.button(label="Create Webs", command=('generateWebs()'), align='center', height=50)
 cmds.intSliderGrp('stringThickness', l="Strand Thickness", f=True, min=1, max=20, value=1)               
@@ -38,6 +38,7 @@ cmds.showWindow(myWin)
 def generateWebs():
     setDensity()
     setRandomness()
+    setIntricacy()
     meshes = determineSelectedObjects()
     """ obj1/2 = list of faces as [face normal, center, radius, vertices] """
     obj1 = findFaces(meshes[0])     
@@ -45,7 +46,10 @@ def generateWebs():
     """ pairs = list of start/end potential pairs as [startPointCloud, endPointCloud1, EPC2, EPC3] """
     pairs = curveFaces(obj1, obj2)  
     createCurve(pairs)
-    processWebIntricacy()
+    
+    """ createCurves runs again on all of the curves marked for intricacy in their name """
+    pairs = processWebIntricacy()
+    createCurve(pairs)
 
 
 def generateGeometry():
@@ -86,6 +90,8 @@ def createCurve(pairs):
 
     hangAmount = cmds.intSliderGrp('hangAmount', q=True, v=True)
     hangAmount = float(hangAmount)/8
+    print "hangAmount"
+    print hangAmount
 
     for pair in pairs:
         """ For Randomizing amount of strings created from each face"""
@@ -95,20 +101,34 @@ def createCurve(pairs):
         else:
             densityAmount = density 
 
+        if 'distance' in pairs[0]:
+            densityAmount =  1
+
         """ Loop to create x amount of webs per face """
         for i in range (0, densityAmount):
             endFace = rnd.randint(0, 2)
             randomizeHang, hangTick = tick(hangTick)
             ns = "Web" + str(nextWebId)
 
-            """ Midpoint of curve for hang """
+            """ Check if this is start/end point clouds from faces or list of intricacy curve point matches """
+            if 'distance' in pairs[0]:
+                """ Midpoint of curve for hang """
+                midPoint = [0.0, 0.0, 0.0]
+                midPoint[0] = pair['startPoint'][0] + (0.5 * (pair['endPoint'][0] - pair['startPoint'][0]))
+                midPoint[1] = pair['startPoint'][1] + (0.5 * (pair['endPoint'][1] - pair['startPoint'][1]))
+                midPoint[2] = pair['startPoint'][2] + (0.5 * (pair['endPoint'][2] - pair['startPoint'][2]))
+
+                newCurve = cmds.curve(degree=3, ep=[pair['startPoint'], midPoint, pair['endPoint']], n=ns)
+                hangAmount = pair['distance'] / 5
+            else:
+                """ Midpoint of curve for hang """
+                midPoint = [0.0, 0.0, 0.0]
+                midPoint[0] = pair[0][i][0] + (0.5 * (pair[1][endFace][i][0] - pair[0][i][0]))
+                midPoint[1] = pair[0][i][1] + (0.5 * (pair[1][endFace][i][1] - pair[0][i][1]))
+                midPoint[2] = pair[0][i][2] + (0.5 * (pair[1][endFace][i][2] - pair[0][i][2]))
             
-            midPoint = [0.0, 0.0, 0.0]
-            midPoint[0] = pair[0][i][0] + (0.5 * (pair[1][endFace][i][0] - pair[0][i][0]))
-            midPoint[1] = pair[0][i][1] + (0.5 * (pair[1][endFace][i][1] - pair[0][i][1]))
-            midPoint[2] = pair[0][i][2] + (0.5 * (pair[1][endFace][i][2] - pair[0][i][2]))
-        
-            cmds.curve(degree=3, ep=[pair[0][i], midPoint, pair[1][endFace][i]], n=ns)
+                cmds.curve(degree=3, ep=[pair[0][i], midPoint, pair[1][endFace][i]], n=ns)
+                newCurve = cmds.rename((ns), ("processingIntricacy"),)
 
             """ For randomizing the value of the hang """
             if randomizeHang:
@@ -117,47 +137,45 @@ def createCurve(pairs):
                 hang = hangAmount
 
             """ Midpoint (ep[1]), and control verticy to L/R of it (cv[1], cv[3]) moved down to create web hang. Moving cv[1] and cv[3] also determines offset"""
-            cmds.select(ns + ".ep[1]")
+            cmds.select(newCurve + ".ep[1]")
             cmds.move(0.0, -hang/1.5, 0.0, r=True)
-            cmds.select(ns + ".cv[1]")
+            cmds.select(newCurve + ".cv[1]")
             cmds.move(0.0, -hang - offsetCV1, 0.0, r=True)
-            cmds.select(ns + ".cv[3]")
+            cmds.select(newCurve + ".cv[3]")
             cmds.move(0.0, -hang - offsetCV3, 0.0, r=True)
             
             #validateCurve()
-
-            if(webIntricacy > 1):
-                cmds.rename((ns), ("processingIntricacy"),)
 
             nextWebId = nextWebId + 1
     print "Curves created"
 
 
 def processWebIntricacy():
-    pointsPerCurve = 6
+    pointsPerCurve = webIntricacy + 1
     incriment = 1.0 / float(pointsPerCurve)
-    
+    ns = "Web" + str(nextWebId)
+
     cmds.select(("processingIntricacy*"))
     webCurves = determineSelectedCurves()
 
+    ''' loop through each web marked for extra intricacy and make list of points along those curves '''
     pointList = []
     for web in webCurves:
         distanceAlongLine = 0 
         for i in range (0, pointsPerCurve):
+            randomScaler = randomizeMe(2.5, 0.2, False)
+            pointOnLine = cmds.pointOnCurve(web, top=True, pr=distanceAlongLine * randomScaler , p=True )
+
+            ''' ignore first point because it is on the geometry, otherwise append the points from this curve to the pointList '''
+            if(i != 0):
+                pointList.append(pointOnLine)
+                
             distanceAlongLine = distanceAlongLine + incriment
-            pointOnLine = cmds.pointOnCurve(web, top=True, pr=distanceAlongLine, p=True )
-            pointList.append(pointOnLine)
-
-            #cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
-            #cmds.move(pointOnLine[0], pointOnLine[1], pointOnLine[2], r=True)
-    
-    print pointList
-    
-    ''' Run at your own risk will take about 2-3 min to finish '''
-    #pairs = matchIntricacyPoints(pointList)
-    #print pairs
-
-
+        cmds.rename((web), (ns),)
+        
+    ''' match points with their closest neighbor to create start/end points '''    
+    pairs = matchIntricacyPoints(pointList)
+    return pairs
 
 
 ##########################################    General Procedures   ###########################################
@@ -304,31 +322,32 @@ def curveFaces(obj1, obj2):
     return pairs
 
 def matchIntricacyPoints(pointList):
-    """ xxxxx """
-    distances = []
+    """ For each point loop through all other points and find distance """
+    matches = []
     for pointA in pointList:
-        print "point A: "
-        print pointA
         tmp = []
         for pointB in pointList:
-            print "point B: "
-            print pointB
-            if(pointA == pointB):
-                break
             distance = convertToVec(pointA, pointB)
             distance = getMagnitude(distance)
-            distanceDict = {
+            
+            """ Store match data in dictonary """
+            matchesDict = {
                 'distance': distance, 
                 'startPoint': pointA, 
                 'endPoint': pointB, 
             }
-            tmp.append(distanceDict)
-            print tmp
+
+            """ If distance is 0 ignore this point, otherwise append it to the matches dictionary """
+            if (matchesDict['distance'] != 0.0):
+                tmp.append(matchesDict)
+
+        """ sort by distance (cuz its index [0]) and select match with least distance between S/E points """
         tmp.sort()
-        print tmp
-        #distances.append(tmp[0])
-    #print "Got distances"
-    #return distances    
+        matches.append(tmp[0])
+        """ remove each pointB from the list as it is compared. This is mostly just to save time when processing. """
+        pointList.pop(0)
+    print "Got matches"
+    return matches    
 
 
 def setDensity():
