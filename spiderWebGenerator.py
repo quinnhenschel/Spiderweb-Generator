@@ -39,7 +39,7 @@ def generateWebs():
     setDensity()
     setRandomness()
     meshes = determineSelectedObjects()
-    """ obj1/2 = list of faces as [face normal, center, radius] """
+    """ obj1/2 = list of faces as [face normal, center, radius, vertices] """
     obj1 = findFaces(meshes[0])     
     obj2 = findFaces(meshes[1])
     """ pairs = list of start/end potential pairs as [startPointCloud, endPointCloud1, EPC2, EPC3] """
@@ -190,17 +190,21 @@ def findFaces(mesh):
         vtxA = cmds.getAttr(mesh + ".vt[" + vtxIdx[0] + "]")   
         vtxB = cmds.getAttr(mesh + ".vt[" + vtxIdx[1] + "]")
         vtxC = cmds.getAttr(mesh + ".vt[" + vtxIdx[2] + "]")
+        #vtxD = cmds.getAttr(mesh + ".vt[" + vtxIdx[3] + "]")
+
         
         """ Make each vertex a list """
         vtxA = list(vtxA[0])
         vtxB = list(vtxB[0])
         vtxC = list(vtxC[0])
+        #vtxD = list(vtxD[0])
         
         """ Multiply verticies by transform matrix (convert to world space) """
         vtxA = matrixMult(meshTransform, vtxA)
         vtxB = matrixMult(meshTransform, vtxB)
         vtxC = matrixMult(meshTransform, vtxC)
-
+        #vtxD = matrixMult(meshTransform, vtxD)
+        #vertices = [vtxA, vtxB, vtxC, vtxD]
         normal = getNormal(vtxA, vtxB, vtxC)
 
         """ Getting center of the face by querying the position of the move manipulator """
@@ -215,7 +219,7 @@ def findFaces(mesh):
         for axes in range(0, len(vecAB)):
             radius[axes] = ((vecAB[axes] + vecAC[axes])/ 2.0)
 
-        faceInfo = [normal, centerPos, radius]
+        faceInfo = [normal, centerPos, radius]  
         faces.append(faceInfo)
     print "Got faces"
     return faces
@@ -229,22 +233,30 @@ def curveFaces(obj1, obj2):
         for end in obj2:
             distance = convertToVec(start[1], end[1])
             distance = getMagnitude(distance)
-            """ distance = [distance, start center, start normal, end center, end normal, start radius, end radius] """
-            distance = [distance, start[1], start[0], end[1], end[0], start[2], end[2]]
-            tmp.append(distance)
+            distanceDict = {
+                'distance': distance, 
+                'startCenter': start[1], 
+                'startNrml': start[0], 
+                'endCenter': end[1], 
+                'endNrml': end[0], 
+                'startRadius': start[2], 
+                'endRadius': end[2], 
+            }
+            tmp.append(distanceDict)
         tmp.sort()
+
         """ Selecting the closest 3 end faces to the start face """
         temp = {
-            'startCenter': tmp[0][1], 
-            'startNrml': tmp[0][2], 
-            'startRadius': tmp[0][5], 
-            'endRadius': tmp[0][6], 
-            'endCenter1': tmp[0][3], 
-            'endNrml1': tmp[0][4], 
-            'endCenter2': tmp[1][3], 
-            'endNrml2': tmp[1][4], 
-            'endCenter3': tmp[2][3], 
-            'endNrml3': tmp[2][4]
+            'startCenter': tmp[0]['startCenter'], 
+            'startNrml': tmp[0]['startNrml'], 
+            'startRadius': tmp[0]['startRadius'], 
+            'endRadius': tmp[0]['endRadius'], 
+            'endCenter1': tmp[0]['endCenter'], 
+            'endNrml1': tmp[0]['endNrml'], 
+            'endCenter2': tmp[1]['endCenter'], 
+            'endNrml2': tmp[1]['endNrml'], 
+            'endCenter3': tmp[2]['endCenter'], 
+            'endNrml3': tmp[2]['endNrml'],
         }
         distances.append(temp)
 
@@ -311,11 +323,14 @@ def tick(tick):
         return False, tick
 
 
-def randomizeMe(value, seed, integer):
+def randomizeMe(value, max, integer):
+    """ If you want an integer back, must say 'True' for 3rd parameter"""
     if integer:
-        newValue = rnd.randint(value, seed)
+        newValue = rnd.randint(value, max)
     else:
-        newValue = value * rnd.uniform(0.5, seed)
+        """ The returned value will be a float that is between half the original value, 
+        or up to double the original value if max were to be set to 2, triple if max was 3, etc. """
+        newValue = value * rnd.uniform(0.5, max)
     return newValue
 
 
@@ -369,8 +384,54 @@ def findIntersect(planeEq, startPoint, POP, endPoint):
             POI[0] = startPoint[0] + (tValue * (endPoint[0] - startPoint[0]))
             POI[1] = startPoint[1] + (tValue * (endPoint[1] - startPoint[1]))
             POI[2] = startPoint[2] + (tValue * (endPoint[2] - startPoint[2]))
+            
+            """ Check that it intersects within the face """
+            #inFace = angleChecker(planeEq, POI)
             return POI
 
+
+def angleChecker(pln, pt):
+    vBA = convertToVec(pln[2], pln[0])       
+    vBC = convertToVec(pln[2], pln[3])        
+    vBP = convertToVec(pln[2], pt)        
+    
+    vDA = convertToVec(pln[4], pln[0])       
+    vDC = convertToVec(pln[4], pln[3])        
+    vDP = convertToVec(pln[4], pt)         
+    
+    #Get angles beteen 2 vectors
+    aBABP = getDotProduct(vBA, vBP, angle=True)
+    aBABC = getDotProduct(vBA, vBC, angle=True)
+    aBCBP = getDotProduct(vBC, vBP, angle=True)
+    aBCBA = getDotProduct(vBC, vBA, angle=True)
+    
+    """
+        if the angle between vector BA and vector BP <= angle between BA and BC    
+        AND the angle between BC and BP <= angle between BC and BA
+        then point is within triangle 1     
+        still need to check triangle 2 
+    """
+    
+    if aBABP <= aBABC and aBCBP <= aBCBA:
+        """ 
+            checking triangle 2
+            if angle DA to DP < angle DA to DC
+            AND angle DC to DP < DC to DA
+            then it's inside the face
+        """
+        aDADP = getDotProduct(vDA, vDP, angle=True)
+        aDADC = getDotProduct(vDA, vDC, angle=True)
+        aDCDP = getDotProduct(vDC, vDP, angle=True)
+        aDCDA = getDotProduct(vDC, vDA, angle=True)
+    
+        if aDADP <= aDADC and aDCDP <= aDCDA:
+            """ 
+                Inside the face!
+            """
+            return True
+        else:
+            return False
+           
 
 def getTValue(pEq, PtA, PtB):
     denEq = 0.0
@@ -442,9 +503,18 @@ def getNormal(VtxA, VtxB, VtxC):
     normal = ((vNormal[0] / magNormal), (vNormal[1] / magNormal), (vNormal[2] / magNormal))
     return normal
 
-def getDotProduct(vA, vB):
+def getDotProduct(vA, vB, angle=False):
     result = 0
     for item in range(len(vA)):
         result += (vA[item] * vB[item]) 
+
+    
+    if angle:
+        magA = getMagnitude(vA)
+        magB = getMagnitude(vB)
+        if(abs((magA*magB)) < ZV):
+            print ("Denominator is Zero")
+            
+        result =  math.degrees(math.acos(result / (magA*magB)))
 
     return result 
