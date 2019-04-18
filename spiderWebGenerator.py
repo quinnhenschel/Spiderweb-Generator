@@ -122,7 +122,7 @@ def createCurve(pairs):
             cmds.select(ns + ".cv[3]")
             cmds.move(0.0, -hang - offsetCV3, 0.0, r=True)
             
-            #validateCurve()
+            validateCurve()
 
             nextWebId = nextWebId + 1
     print "Curves created"
@@ -190,21 +190,21 @@ def findFaces(mesh):
         vtxA = cmds.getAttr(mesh + ".vt[" + vtxIdx[0] + "]")   
         vtxB = cmds.getAttr(mesh + ".vt[" + vtxIdx[1] + "]")
         vtxC = cmds.getAttr(mesh + ".vt[" + vtxIdx[2] + "]")
-        #vtxD = cmds.getAttr(mesh + ".vt[" + vtxIdx[3] + "]")
+        vtxD = cmds.getAttr(mesh + ".vt[" + vtxIdx[3] + "]")
 
         
         """ Make each vertex a list """
         vtxA = list(vtxA[0])
         vtxB = list(vtxB[0])
         vtxC = list(vtxC[0])
-        #vtxD = list(vtxD[0])
+        vtxD = list(vtxD[0])
         
         """ Multiply verticies by transform matrix (convert to world space) """
         vtxA = matrixMult(meshTransform, vtxA)
         vtxB = matrixMult(meshTransform, vtxB)
         vtxC = matrixMult(meshTransform, vtxC)
-        #vtxD = matrixMult(meshTransform, vtxD)
-        #vertices = [vtxA, vtxB, vtxC, vtxD]
+        vtxD = matrixMult(meshTransform, vtxD)
+        vertices = [vtxA, vtxB, vtxC, vtxD]
         normal = getNormal(vtxA, vtxB, vtxC)
 
         """ Getting center of the face by querying the position of the move manipulator """
@@ -219,7 +219,7 @@ def findFaces(mesh):
         for axes in range(0, len(vecAB)):
             radius[axes] = ((vecAB[axes] + vecAC[axes])/ 2.0)
 
-        faceInfo = [normal, centerPos, radius]  
+        faceInfo = [normal, centerPos, radius, vertices]  
         faces.append(faceInfo)
     print "Got faces"
     return faces
@@ -237,10 +237,12 @@ def curveFaces(obj1, obj2):
                 'distance': distance, 
                 'startCenter': start[1], 
                 'startNrml': start[0], 
+                'startVerts': start[3],
                 'endCenter': end[1], 
                 'endNrml': end[0], 
                 'startRadius': start[2], 
                 'endRadius': end[2], 
+                'endVerts': end[3],
             }
             tmp.append(distanceDict)
         tmp.sort()
@@ -250,13 +252,17 @@ def curveFaces(obj1, obj2):
             'startCenter': tmp[0]['startCenter'], 
             'startNrml': tmp[0]['startNrml'], 
             'startRadius': tmp[0]['startRadius'], 
+            'startVerts': tmp[0]['startVerts'], 
             'endRadius': tmp[0]['endRadius'], 
             'endCenter1': tmp[0]['endCenter'], 
             'endNrml1': tmp[0]['endNrml'], 
+            'endVerts1': tmp[0]['endVerts'], 
             'endCenter2': tmp[1]['endCenter'], 
             'endNrml2': tmp[1]['endNrml'], 
+            'endVerts2': tmp[1]['endVerts'],
             'endCenter3': tmp[2]['endCenter'], 
             'endNrml3': tmp[2]['endNrml'],
+            'endVerts3': tmp[2]['endVerts'],
         }
         distances.append(temp)
 
@@ -270,14 +276,14 @@ def curveFaces(obj1, obj2):
             if dp < 0:
                 """ Getting end point clouds """
                 endPE = getPlaneEq(item['endCenter'+ str(counter)], item['endNrml'+ str(counter)])
-                endPoints = generatePointCloud(endPE, item['endCenter'+ str(counter)], item['endRadius'])
+                endPoints = generatePointCloud(endPE, item['endCenter'+ str(counter)], item['endRadius'], item['endVerts'+ str(counter)])
                 endPointsAll.append(endPoints)
             
             counter += 1
         if len(endPointsAll) == 3 :
             """ Start point cloud """
             startPE = getPlaneEq(item['startCenter'], item['startNrml'])
-            startPoints = generatePointCloud(startPE, item['startCenter'], item['startRadius'])
+            startPoints = generatePointCloud(startPE, item['startCenter'], item['startRadius'], item['startVerts'])
             pair = [startPoints, endPointsAll]
             pairs.append(pair)
     
@@ -334,7 +340,7 @@ def randomizeMe(value, max, integer):
     return newValue
 
 
-def generatePointCloud(planeEq, POP, radius):
+def generatePointCloud(planeEq, POP, radius, vertices):
     global density
     spawnPoint = []
 
@@ -352,7 +358,7 @@ def generatePointCloud(planeEq, POP, radius):
         point = [POP[0] + x, POP[1] + y, POP[2]+z]
 
         """  Check that the line intersects the plane """
-        POI = findIntersect(planeEq, spawnPoint, POP, point)
+        POI = findIntersect(planeEq, spawnPoint, POP, point, vertices)
         if POI:
             pointCloud.append(POI)
         else:
@@ -362,7 +368,7 @@ def generatePointCloud(planeEq, POP, radius):
 
 
 
-def findIntersect(planeEq, startPoint, POP, endPoint):
+def findIntersect(planeEq, startPoint, POP, endPoint, vertices):
     """  Check to see if the curve intersected the plane """
     vecStart = convertToVec(startPoint, POP) 
     vecEnd = convertToVec(endPoint, POP)
@@ -371,7 +377,7 @@ def findIntersect(planeEq, startPoint, POP, endPoint):
 
     if(((kStart>0.0) and (kEnd>0.0)) or ((kStart<0.0) and (kEnd<0.0))):
         """ Same side of plane, did not intersect """
-        print "same side"
+        #print "same side"
         return
     else:
         """  Intersected, find intersection point and add to pointCloud """
@@ -386,18 +392,21 @@ def findIntersect(planeEq, startPoint, POP, endPoint):
             POI[2] = startPoint[2] + (tValue * (endPoint[2] - startPoint[2]))
             
             """ Check that it intersects within the face """
-            #inFace = angleChecker(planeEq, POI)
-            return POI
+            inFace = angleChecker(POI, vertices)
+            if inFace:
+                return POI
+            else:
+                return
 
 
-def angleChecker(pln, pt):
-    vBA = convertToVec(pln[2], pln[0])       
-    vBC = convertToVec(pln[2], pln[3])        
-    vBP = convertToVec(pln[2], pt)        
+def angleChecker(pt, vertices):
+    vBA = convertToVec(vertices[1], vertices[0])       
+    vBC = convertToVec(vertices[1], vertices[2])        
+    vBP = convertToVec(vertices[1], pt)        
     
-    vDA = convertToVec(pln[4], pln[0])       
-    vDC = convertToVec(pln[4], pln[3])        
-    vDP = convertToVec(pln[4], pt)         
+    vDA = convertToVec(vertices[3], vertices[0])       
+    vDC = convertToVec(vertices[3], vertices[2])        
+    vDP = convertToVec(vertices[3], pt)         
     
     #Get angles beteen 2 vectors
     aBABP = getDotProduct(vBA, vBP, angle=True)
