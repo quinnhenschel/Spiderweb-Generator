@@ -38,14 +38,15 @@ cmds.showWindow(myWin)
 def generateWebs():
     setDensity()
     setRandomness()
+    setIntricacy()
     meshes = determineSelectedObjects()
-    """ obj1/2 = list of faces as [face normal, center, radius, vertices] """
+    """ obj1/2 = dictionary of faces as {normal, center, radius, vertices} """
     obj1 = findFaces(meshes[0])     
     obj2 = findFaces(meshes[1])
     """ pairs = list of start/end potential pairs as [startPointCloud, endPointCloud1, EPC2, EPC3] """
     pairs = curveFaces(obj1, obj2)  
-    createCurve(pairs)
-    processWebIntricacy()
+    createCurve(pairs, obj1, obj2)
+    #processWebIntricacy()
 
 
 def generateGeometry():
@@ -69,8 +70,8 @@ def generateGeometry():
     cmds.delete(circleGeo)
     #need to add a check here to flip normals if they are going the wrong way (in instead of out). Im honestly not sure how to do this but will come back
 
-def createCurve(pairs):
-    global nextWebId, density, maxRandom
+def createCurve(pairs, obj1, obj2):
+    global nextWebId, density, maxRandom, webIntricacy
     hangTick = rnd.randint(0, maxRandom)
     densityTick = rnd.randint(0, maxRandom)
     
@@ -124,33 +125,44 @@ def createCurve(pairs):
             cmds.select(ns + ".cv[3]")
             cmds.move(0.0, -hang - offsetCV3, 0.0, r=True)
             
-            validateCurve()
 
             if(webIntricacy > 1):
                 cmds.rename((ns), ("processingIntricacy"),)
 
             nextWebId = nextWebId + 1
+    validateCurve(obj1, obj2)
     print "Curves created"
 
 
-def processWebIntricacy():
+def processWebIntricacy(webs=False):
     pointsPerCurve = 6
     incriment = 1.0 / float(pointsPerCurve)
-    
-    cmds.select(("processingIntricacy*"))
+    if webs:
+        cmds.select("Web*")
+    else:
+        cmds.select(("processingIntricacy*"))
     webCurves = determineSelectedCurves()
 
     pointList = []
+    webList = []
+
     for web in webCurves:
+        webPoints = []
         distanceAlongLine = 0 
         for i in range (0, pointsPerCurve):
             distanceAlongLine = distanceAlongLine + incriment
             pointOnLine = cmds.pointOnCurve(web, top=True, pr=distanceAlongLine, p=True )
             pointList.append(pointOnLine)
+            webPoints.append(pointOnLine)
 
-            #cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
-            #cmds.move(pointOnLine[0], pointOnLine[1], pointOnLine[2], r=True)
-    
+            cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
+            cmds.move(pointOnLine[0], pointOnLine[1], pointOnLine[2], r=True)
+        
+        if webs:
+            webList.append(webPoints)
+   
+    if webs:
+        return webList
     print pointList
     
     ''' Run at your own risk will take about 2-3 min to finish '''
@@ -239,7 +251,12 @@ def findFaces(mesh):
         for axes in range(0, len(vecAB)):
             radius[axes] = ((vecAB[axes] + vecAC[axes])/ 2.0)
 
-        faceInfo = [normal, centerPos, radius, vertices]  
+        faceInfo = {
+            'normal':normal,
+            'center': centerPos, 
+            'radius': radius,
+            'vertices': vertices,
+        }  
         faces.append(faceInfo)
     print "Got faces"
     return faces
@@ -250,18 +267,18 @@ def curveFaces(obj1, obj2):
     for start in obj1:
         tmp = []
         for end in obj2:
-            distance = convertToVec(start[1], end[1])
+            distance = convertToVec(start['center'], end['center'])
             distance = getMagnitude(distance)
             distanceDict = {
                 'distance': distance, 
-                'startCenter': start[1], 
-                'startNrml': start[0], 
-                'startVerts': start[3],
-                'endCenter': end[1], 
-                'endNrml': end[0], 
-                'startRadius': start[2], 
-                'endRadius': end[2], 
-                'endVerts': end[3],
+                'startCenter': start['center'], 
+                'startNrml': start['normal'], 
+                'startVerts': start['vertices'],
+                'endCenter': end['center'], 
+                'endNrml': end['normal'], 
+                'startRadius': start['radius'], 
+                'endRadius': end['radius'], 
+                'endVerts': end['vertices'],
             }
             tmp.append(distanceDict)
         tmp.sort()
@@ -365,8 +382,41 @@ def setIntricacy():
 
 ##########################################   Base Procedures   ###########################################
 
-def validateCurve():
-    print "x"
+def validateCurve(obj1, obj2):
+    """ Checks to see if the curve intersects geometry between any of the 
+        generated points along the curve"""
+    print "validating teh curvesssssssssss"
+    webList = processWebIntricacy(True)
+    for points in webList:
+        for i in range (0, len(points)-2):
+            vector = convertToVec(points[i], points[i+1])
+
+            # for face in obj1:
+            #     planeEq = getPlaneEq(face['vertices'][0], face['normal'])
+            #     POI = findIntersect(planeEq, points[i], face['center'], points[i+1], face['vertices'])
+            #     if POI:
+            #         """ Curve intersects a face"""
+            #         print "stop"
+            #     else:
+            #         print "pass"
+            for face in obj2:
+                planeEq = getPlaneEq(face['vertices'][0], face['normal'])
+                tValue = getTValue(planeEq, points[i], points[i+1])
+                POI = [0.0, 0.0, 0.0]
+                POI[0] = points[i][0] + (tValue * (points[i+1][0] - points[i][0]))
+                POI[1] = points[i][1] + (tValue * (points[i+1][1] - points[i][1]))
+                POI[2] = points[i][2] + (tValue * (points[i+1][2] - points[i][2]))
+                intersects = angleChecker(POI, face['vertices'])
+                if intersects:
+                    print "intersectsssssssssssssss"
+                # POI = findIntersect(planeEq, points[i], face['center'], points[i+1], face['vertices'])
+                # if POI:
+                #     """ Curve intersects a face"""
+                #     print "stop stop stop stop"
+                # else:
+                #     print "pass"
+                    
+            
 
 def tick(tick):
     global randomValue, maxRandom
@@ -426,9 +476,10 @@ def findIntersect(planeEq, startPoint, POP, endPoint, vertices):
 
     if(((kStart>0.0) and (kEnd>0.0)) or ((kStart<0.0) and (kEnd<0.0))):
         """ Same side of plane, did not intersect """
-        #print "same side"
+        # print "same side"
         return
     else:
+        print "intersected"
         """  Intersected, find intersection point and add to pointCloud """
         tValue = getTValue(planeEq, startPoint, endPoint)
         if tValue == False:
@@ -443,6 +494,7 @@ def findIntersect(planeEq, startPoint, POP, endPoint, vertices):
             """ Check that it intersects within the face """
             inFace = angleChecker(POI, vertices)
             if inFace:
+                print "inside face"
                 return POI
             else:
                 return
