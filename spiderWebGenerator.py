@@ -45,6 +45,8 @@ def generateWebs():
     """ pairs = list of start/end potential pairs as [startPointCloud, endPointCloud1, EPC2, EPC3] """
     pairs = curveFaces(obj1, obj2)  
     createCurve(pairs)
+    processWebIntricacy()
+
 
 def generateGeometry():
     webCurves = determineSelectedCurves()
@@ -124,16 +126,36 @@ def createCurve(pairs):
             
             validateCurve()
 
+            if(webIntricacy > 1):
+                cmds.rename((ns), ("processingIntricacy"),)
+
             nextWebId = nextWebId + 1
     print "Curves created"
 
 
+def processWebIntricacy():
+    pointsPerCurve = 6
+    incriment = 1.0 / float(pointsPerCurve)
+    
+    cmds.select(("processingIntricacy*"))
+    webCurves = determineSelectedCurves()
 
+    pointList = []
+    for web in webCurves:
+        distanceAlongLine = 0 
+        for i in range (0, pointsPerCurve):
+            distanceAlongLine = distanceAlongLine + incriment
+            pointOnLine = cmds.pointOnCurve(web, top=True, pr=distanceAlongLine, p=True )
+            pointList.append(pointOnLine)
 
-
-
-
-
+            #cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
+            #cmds.move(pointOnLine[0], pointOnLine[1], pointOnLine[2], r=True)
+    
+    print pointList
+    
+    ''' Run at your own risk will take about 2-3 min to finish '''
+    #pairs = matchIntricacyPoints(pointList)
+    #print pairs
 
 
 
@@ -159,7 +181,6 @@ def determineSelectedObjects():
 
     return meshList
     
-    
 def determineSelectedCurves():
     selectedCurves = cmds.ls(selection=True)
     curveList = []
@@ -173,7 +194,6 @@ def determineSelectedCurves():
         print ('Not enough curves selected.')
 
     return curveList
-
 
 def findFaces(mesh):
     faces = []
@@ -223,7 +243,6 @@ def findFaces(mesh):
         faces.append(faceInfo)
     print "Got faces"
     return faces
-
 
 def curveFaces(obj1, obj2):
     """ Finds faces with opposite normals and close in distance """
@@ -290,6 +309,34 @@ def curveFaces(obj1, obj2):
     print "Got pairs"
     return pairs
 
+def matchIntricacyPoints(pointList):
+    """ xxxxx """
+    distances = []
+    for pointA in pointList:
+        print "point A: "
+        print pointA
+        tmp = []
+        for pointB in pointList:
+            print "point B: "
+            print pointB
+            if(pointA == pointB):
+                break
+            distance = convertToVec(pointA, pointB)
+            distance = getMagnitude(distance)
+            distanceDict = {
+                'distance': distance, 
+                'startPoint': pointA, 
+                'endPoint': pointB, 
+            }
+            tmp.append(distanceDict)
+            print tmp
+        tmp.sort()
+        print tmp
+        #distances.append(tmp[0])
+    #print "Got distances"
+    #return distances    
+
+
 def setDensity():
     global density
     density = cmds.intSliderGrp('density', q=True, v=True)
@@ -299,7 +346,9 @@ def setRandomness():
     maxRandom = cmds.intSliderGrp('random', q=True, max=True)
     randomValue = cmds.intSliderGrp('random', q=True, v=True)
     
-
+def setIntricacy():
+    global webIntricacy
+    webIntricacy = cmds.intSliderGrp('webIntricacy', q=True, v=True)
 
 
 
