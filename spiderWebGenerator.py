@@ -38,6 +38,7 @@ cmds.showWindow(myWin)
 def generateWebs():
     setDensity()
     setRandomness()
+    setIntricacy()
     meshes = determineSelectedObjects()
     """ obj1/2 = list of faces as [face normal, center, pointCloud] """
     obj1 = findFaces(meshes[0])     
@@ -45,6 +46,7 @@ def generateWebs():
     """ pairs = list of start/end potential pairs as [startPointCloud, endPointCloud, midpoint] """
     pairs = curveFaces(obj1, obj2)  
     createCurve(pairs)
+    processWebIntricacy()
 
 def generateGeometry():
     webCurves = determineSelectedCurves()
@@ -97,6 +99,8 @@ def createCurve(pairs):
         
             cmds.curve(degree=3, ep=[pair[0][i], midPoint, pair[1][i]], n=ns)
 
+
+
             if randomize:
                 hang = randomizeMe(hangAmount, hangAmount + 2)
             else:
@@ -112,11 +116,30 @@ def createCurve(pairs):
             
             #validateCurve()
 
+            if(webIntricacy > 1):
+                cmds.rename((ns), ("processingIntricacy"),)
+
             nextWebId = nextWebId + 1
     print "Curves created"
 
 
+def processWebIntricacy():
+    pointsPerCurve = 6
+    incriment = 1.0 / float(pointsPerCurve)
+    
+    cmds.select(("processingIntricacy*"))
+    #cmds.move(0.0, -2.0, 0.0, r=True)
+    webCurves = determineSelectedCurves()
 
+    for web in webCurves:
+        distanceAlongLine = 0 
+        for i in range (0, pointsPerCurve):
+            distanceAlongLine = distanceAlongLine + incriment
+            if(distanceAlongLine == 1):
+                break
+            pointOnLine = cmds.pointOnCurve(web, top=True, pr=distanceAlongLine, p=True )
+            cube = cmds.polyCube( sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
+            cmds.move(pointOnLine[0], pointOnLine[1], pointOnLine[2], r=True)
 
 
 
@@ -249,6 +272,9 @@ def setRandomness():
     randomValue = cmds.intSliderGrp('random', q=True, v=True)
     randomTick = 0 #(maxValue + 1) - randomValue
 
+def setIntricacy():
+    global webIntricacy
+    webIntricacy = cmds.intSliderGrp('webIntricacy', q=True, v=True)
 
 
 
