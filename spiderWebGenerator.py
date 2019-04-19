@@ -40,16 +40,23 @@ def generateWebs():
     setRandomness()
     setIntricacy()
     meshes = determineSelectedObjects()
-    """ obj1/2 = dictionary of faces as {normal, center, radius, vertices} """
-    obj1 = findFaces(meshes[0])     
-    obj2 = findFaces(meshes[1])
-    """ pairs = list of start/end potential pairs as [startPointCloud, endPointClouds] """
-    pairs = curveFaces(obj1, obj2)  
-    createCurve(pairs, obj1, obj2)
-    
-    """ createCurves runs again on all of the curves marked for intricacy in their name """
-    pairs = processWebIntricacy()
-    createCurve(pairs, obj1, obj2)
+    print meshes
+    for i in range(0, len(meshes)-1):
+        
+        j = i+1
+        if i == len(meshes)-1:
+            j = 0
+        print meshes[i], meshes[j]
+        """ obj1/2 = dictionary of faces as {normal, center, radius, vertices} """
+        obj1 = findFaces(meshes[i])     
+        obj2 = findFaces(meshes[j])
+        """ pairs = list of start/end potential pairs as [startPointCloud, endPointClouds] """
+        pairs = curveFaces(obj1, obj2)  
+        createCurve(pairs, obj1, obj2)
+        
+        """ createCurves runs again on all of the curves marked for intricacy in their name """
+        pairs = processWebIntricacy()
+        createCurve(pairs, obj1, obj2)
 
 
 def generateGeometry():
@@ -147,22 +154,20 @@ def createCurve(pairs, obj1, obj2):
             
             """ Checking if curve is piercing geo """
             needsFixing = validateCurve(obj1, obj2, newCurve)
-            if needsFixing:
-                cmds.delete(newCurve)
-            elif 'distance' not in pairs[0]:
-                newCurve = cmds.rename((ns), ("processingIntricacy"))
-
-                
+            
+            if 'distance' not in pairs[0] and not needsFixing:
+                newCurve = cmds.rename(ns, "processingIntricacy")
 
     print "Curves created"
 
 
 def processWebIntricacy():
+    global nextWebId
     pointsPerCurve = webIntricacy + 1
     incriment = 1.0 / float(pointsPerCurve)
     ns = "Web" + str(nextWebId)
 
-    cmds.select(("processingIntricacy*"))
+    cmds.select("processingIntricacy*")
     webCurves = determineSelectedCurves()
 
     ''' loop through each web marked for extra intricacy and make list of points along those curves '''
@@ -179,7 +184,7 @@ def processWebIntricacy():
                 pointList.append(pointOnLine)
                 
             distanceAlongLine = distanceAlongLine + incriment
-        cmds.rename((web), (ns),)
+        cmds.rename(web, ns)
         
     ''' match points with their closest neighbor to create start/end points '''    
     pairs = matchIntricacyPoints(pointList)
@@ -199,11 +204,11 @@ def determineSelectedObjects():
             meshList.append(shape)
 
     # This to be taken out/adjusted for when we're ready for multiple shapes      
-    if len(meshList) < 2:
-        print ('Not enough shapes selected.')
-    elif len(meshList) > 2:
-        print ('Too many shapes. Only first two will be used.')
-        meshList = meshList[0:2]
+    # if len(meshList) < 2:
+    #     print ('Not enough shapes selected.')
+    # elif len(meshList) > 2:
+    #     print ('Too many shapes. Only first two will be used.')
+    #     meshList = meshList[0:2]
 
     return meshList
     
@@ -275,7 +280,8 @@ def findFaces(mesh):
     return faces
 
 def curveFaces(obj1, obj2):
-    maxEndFaces = 5
+    global randomValue
+    maxEndFaces = randomizeMe(1, randomValue + 1, True)
     """ Finds faces with opposite normals and close in distance """
     distances = []
     for start in obj1:
@@ -380,7 +386,9 @@ def setIntricacy():
     webIntricacy = cmds.intSliderGrp('webIntricacy', q=True, v=True)
 
 
-
+def manipulateCurve(web, POI, planeEq, tValue, face):
+    print "me", web
+    cmds.delete(web)
 
 
 
@@ -415,10 +423,12 @@ def validateCurve(obj1, obj2, ns):
         if intersects and -0.001 <=tValue <= 1.001:
             counter1 += 1
             if counter1 >= 2:
+                manipulateCurve(ns, POI, planeEq, tValue, face)
                 return True
-            # else:
-            #     cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
-            #     cmds.move(POI[0], POI[1], POI[2], r=True)
+        
+               
+                
+                
     for face in obj2:
         planeEq = getPlaneEq(face['vertices'][0], face['normal'])
         tValue = getTValue(planeEq, p0, p4)
@@ -430,7 +440,8 @@ def validateCurve(obj1, obj2, ns):
         if intersects and -0.001 <=tValue <= 1.001:
             counter2 += 1
             if counter2 >= 2:
-                return True      
+                manipulateCurve(ns, POI, planeEq, tValue, face)
+                return True    
 
 def tick(tick):
     global randomValue, maxRandom
