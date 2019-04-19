@@ -40,23 +40,17 @@ def generateWebs():
     setRandomness()
     setIntricacy()
     meshes = determineSelectedObjects()
-    print meshes
-    for i in range(0, len(meshes)-1):
-        
-        j = i+1
-        if i == len(meshes)-1:
-            j = 0
-        print meshes[i], meshes[j]
-        """ obj1/2 = dictionary of faces as {normal, center, radius, vertices} """
-        obj1 = findFaces(meshes[i])     
-        obj2 = findFaces(meshes[j])
-        """ pairs = list of start/end potential pairs as [startPointCloud, endPointClouds] """
-        pairs = curveFaces(obj1, obj2)  
-        createCurve(pairs, obj1, obj2)
-        
-        """ createCurves runs again on all of the curves marked for intricacy in their name """
-        pairs = processWebIntricacy()
-        createCurve(pairs, obj1, obj2)
+    
+    """ obj1/2 = dictionary of faces as {normal, center, radius, vertices} """
+    obj1 = findFaces(meshes[0])     
+    obj2 = findFaces(meshes[1])
+    """ pairs = list of start/end potential pairs as [startPointCloud, endPointClouds] """
+    pairs = curveFaces(obj1, obj2)  
+    createCurve(pairs, obj1, obj2)
+    
+    """ createCurves runs again on all of the curves marked for intricacy in their name """
+    pairs = processWebIntricacy()
+    createCurve(pairs, obj1, obj2)
 
 
 def generateGeometry():
