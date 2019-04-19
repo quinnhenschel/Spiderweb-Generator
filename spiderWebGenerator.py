@@ -100,6 +100,7 @@ def createCurve(pairs, obj1, obj2):
         for i in range (0, densityAmount):
             endFace = rnd.randint(0, 2)
             randomizeHang, hangTick = tick(hangTick)
+            nextWebId = nextWebId + 1
             ns = "Web" + str(nextWebId)
 
             """ Midpoint of curve for hang """
@@ -108,9 +109,9 @@ def createCurve(pairs, obj1, obj2):
             midPoint[0] = pair[0][i][0] + (0.5 * (pair[1][endFace][i][0] - pair[0][i][0]))
             midPoint[1] = pair[0][i][1] + (0.5 * (pair[1][endFace][i][1] - pair[0][i][1]))
             midPoint[2] = pair[0][i][2] + (0.5 * (pair[1][endFace][i][2] - pair[0][i][2]))
-        
-            cmds.curve(degree=3, ep=[pair[0][i], midPoint, pair[1][endFace][i]], n=ns)
 
+            cmds.curve(degree=3, ep=[pair[0][i], midPoint, pair[1][endFace][i]], n=ns)
+            
             """ For randomizing the value of the hang """
             if randomizeHang:
                 hang = randomizeMe(hangAmount, hangAmount + 2, False)
@@ -125,12 +126,10 @@ def createCurve(pairs, obj1, obj2):
             cmds.select(ns + ".cv[3]")
             cmds.move(0.0, -hang - offsetCV3, 0.0, r=True)
             
-
+            validateCurve(obj1, obj2, ns)
             if(webIntricacy > 1):
                 cmds.rename((ns), ("processingIntricacy"),)
 
-            nextWebId = nextWebId + 1
-    validateCurve(obj1, obj2)
     print "Curves created"
 
 
@@ -155,11 +154,11 @@ def processWebIntricacy(webs=False):
             pointList.append(pointOnLine)
             webPoints.append(pointOnLine)
 
-            cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
-            cmds.move(pointOnLine[0], pointOnLine[1], pointOnLine[2], r=True)
+            # cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
+            # cmds.move(pointOnLine[0], pointOnLine[1], pointOnLine[2], r=True)
         
         if webs:
-            webList.append(webPoints)
+            webList.append({'web': web, 'points':webPoints})
    
     if webs:
         return webList
@@ -382,39 +381,86 @@ def setIntricacy():
 
 ##########################################   Base Procedures   ###########################################
 
-def validateCurve(obj1, obj2):
+def validateCurve(obj1, obj2, ns):
     """ Checks to see if the curve intersects geometry between any of the 
         generated points along the curve"""
-    print "validating teh curvesssssssssss"
-    webList = processWebIntricacy(True)
-    for points in webList:
-        for i in range (0, len(points)-2):
-            vector = convertToVec(points[i], points[i+1])
+    start = cmds.pointPosition(ns + ".ep[0]")
+    end = cmds.pointPosition(ns + ".ep[2]")
+    mid = cmds.pointPosition(ns + ".ep[1]")
+    counter1 = 0
+    counter2 = 0
+    for face in obj1:
+        planeEq = getPlaneEq(face['vertices'][0], face['normal'])
+        tValue = getTValue(planeEq, start, end)
+        POI = [0.0, 0.0, 0.0]
+        POI[0] = ((1-tValue)**2.0)*start[0] + (2.0*tValue)*(1-tValue)*mid[0]+ (tValue**2.0)*end[0]
+        POI[1] = ((1-tValue)**2.0)*start[1] + (2.0*tValue)*(1-tValue)*mid[1]+ (tValue**2.0)*end[1]
+        POI[2] = ((1-tValue)**2.0)*start[2] + (2.0*tValue)*(1-tValue)*mid[2]+ (tValue**2.0)*end[2]
+        intersects = angleChecker(POI, face['vertices'])
+        if intersects and -0.01 <=tValue <= 1.01:
+            counter1 += 1
+            if counter1 >= 2:
+                print "obj1", ns
+            else:
+                cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
+                cmds.move(POI[0], POI[1], POI[2], r=True)
+    for face in obj2:
+        planeEq = getPlaneEq(face['vertices'][0], face['normal'])
+        tValue = getTValue(planeEq, end, start)
+        POI = [0.0, 0.0, 0.0]
+        POI[0] = ((1-tValue)**2.0)*end[0] + (2.0*tValue)*(1-tValue)*mid[0]+ (tValue**2.0)*start[0]
+        POI[1] = ((1-tValue)**2.0)*end[1] + (2.0*tValue)*(1-tValue)*mid[1]+ (tValue**2.0)*start[1]
+        POI[2] = ((1-tValue)**2.0)*end[2] + (2.0*tValue)*(1-tValue)*mid[2]+ (tValue**2.0)*start[2]
+        intersects = angleChecker(POI, face['vertices'])
+        if intersects and -0.01 <=tValue <= 1.01:
+            counter2 += 1
+            if counter2 >= 2:
+                print "obj2", ns
+            else:
+                cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
+                cmds.move(POI[0], POI[1], POI[2], r=True)
+    
+        
+    
+    
+    #webList = processWebIntricacy(True)
+    
+    # for pair in webList:
+    #     breakMe = False
+    #     counter = 0
+    #     for i in range (0, len(pair['points'])):
+    #         if breakMe:
+    #             break
+    #         vector = convertToVec(pair['points'][i], pair['points'][i+1])
+    #         # for face in obj1:
+    #         #     planeEq = getPlaneEq(face['vertices'][0], face['normal'])
+    #         #     POI = findIntersect(planeEq, points[i], face['center'], points[i+1], face['vertices'])
+    #         #     if POI:
+    #         #         """ Curve intersects a face"""
+    #         #         print "stop"
+    #         #     else:
+    #         #         print "pass"
+    #         for face in obj2:
+    #             if breakMe:
+    #                 break
+    #             planeEq = getPlaneEq(face['vertices'][0], face['normal'])
+    #             tValue = getTValue(planeEq, pair['points'][i], pair['points'][i+1])
 
-            # for face in obj1:
-            #     planeEq = getPlaneEq(face['vertices'][0], face['normal'])
-            #     POI = findIntersect(planeEq, points[i], face['center'], points[i+1], face['vertices'])
-            #     if POI:
-            #         """ Curve intersects a face"""
-            #         print "stop"
-            #     else:
-            #         print "pass"
-            for face in obj2:
-                planeEq = getPlaneEq(face['vertices'][0], face['normal'])
-                tValue = getTValue(planeEq, points[i], points[i+1])
-                POI = [0.0, 0.0, 0.0]
-                POI[0] = points[i][0] + (tValue * (points[i+1][0] - points[i][0]))
-                POI[1] = points[i][1] + (tValue * (points[i+1][1] - points[i][1]))
-                POI[2] = points[i][2] + (tValue * (points[i+1][2] - points[i][2]))
-                intersects = angleChecker(POI, face['vertices'])
-                if intersects:
-                    print "intersectsssssssssssssss"
-                # POI = findIntersect(planeEq, points[i], face['center'], points[i+1], face['vertices'])
-                # if POI:
-                #     """ Curve intersects a face"""
-                #     print "stop stop stop stop"
-                # else:
-                #     print "pass"
+    #             POI = [0.0, 0.0, 0.0]
+                
+    #             POI[0] = pair['points'][i][0] + (tValue * (pair['points'][i+1][0] - pair['points'][i][0]))
+    #             POI[1] = pair['points'][i][1] + (tValue * (pair['points'][i+1][1] - pair['points'][i][1]))
+    #             POI[2] = pair['points'][i][2] + (tValue * (pair['points'][i+1][2] - pair['points'][i][2]))
+               
+    #             intersects = angleChecker(POI, face['vertices'])
+    #             if intersects:
+    #                 counter += 1
+    #                 print "intersectsssssssssssssss"
+    #                 print pair['web']
+                #             cmds.delete(pair['web'])
+                #             breakMe = True
+                #             break
+             
                     
             
 
@@ -479,7 +525,6 @@ def findIntersect(planeEq, startPoint, POP, endPoint, vertices):
         # print "same side"
         return
     else:
-        print "intersected"
         """  Intersected, find intersection point and add to pointCloud """
         tValue = getTValue(planeEq, startPoint, endPoint)
         if tValue == False:
@@ -494,7 +539,6 @@ def findIntersect(planeEq, startPoint, POP, endPoint, vertices):
             """ Check that it intersects within the face """
             inFace = angleChecker(POI, vertices)
             if inFace:
-                print "inside face"
                 return POI
             else:
                 return
