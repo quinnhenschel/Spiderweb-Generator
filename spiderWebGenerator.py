@@ -52,10 +52,10 @@ def generateWebs():
         obj2 = findFaces(meshes[j])
         """ pairs = list of start/end potential pairs as [startPointCloud, endPointClouds] """
         pairs = curveFaces(obj1, obj2)  
-        createCurve(pairs, obj1, obj2)
+        curvesForIntricacy = createCurve(pairs, obj1, obj2)
         
         """ createCurves runs again on all of the curves marked for intricacy in their name """
-        pairs = processWebIntricacy()
+        pairs = processWebIntricacy(curvesForIntricacy)
         createCurve(pairs, obj1, obj2)
 
 
@@ -84,6 +84,8 @@ def createCurve(pairs, obj1, obj2):
     global nextWebId, density, maxRandom, webIntricacy
     hangTick = rnd.randint(0, maxRandom)
     densityTick = rnd.randint(0, maxRandom)
+
+    curvesForIntricacy = []
     
     """ Offset broken up into two pieces: L/R side of the middle control vertex. Not allowed to be below 0. """
     hangOffset = cmds.intSliderGrp('hangOffset', q=True, v=True)
@@ -156,19 +158,33 @@ def createCurve(pairs, obj1, obj2):
             needsFixing = validateCurve(obj1, obj2, newCurve)
             
             if endFace>=0 and not needsFixing:
-                newCurve = cmds.rename(ns, "processingIntricacy")
+                
+                curvesForIntricacy.append(newCurve)
+                #newCurve = cmds.rename(ns, "processingIntricacy")
 
     print "Curves created"
 
+    print 'curvesForIntricacy'
+    print curvesForIntricacy
+    return curvesForIntricacy
+    gfdg
 
-def processWebIntricacy():
+
+def processWebIntricacy(curvesForIntricacy):
     global nextWebId
     pointsPerCurve = webIntricacy + 1
     incriment = 1.0 / float(pointsPerCurve)
     ns = "Web" + str(nextWebId)
 
-    cmds.select("processingIntricacy*", r=True)
+    length = len(curvesForIntricacy)
+    print 'length'
+    print length
+
+
+    cmds.select(curvesForIntricacy, r=True)
     webCurves = determineSelectedCurves()
+    print "webCurves"
+    print webCurves
 
     ''' loop through each web marked for extra intricacy and make list of points along those curves '''
     pointList = []
@@ -205,9 +221,7 @@ def determineSelectedObjects():
 
     if len(meshList) < 2:
         print ('Not enough shapes selected.')
-    elif len(meshList) > 2:
-        print ('Too many shapes. Only first two will be used.')
-        meshList = meshList[0:2]
+
 
     return meshList
     
@@ -450,7 +464,7 @@ def validateCurve(obj1, obj2, ns):
     Method 1: Generate points along the curve and create vectors between them to check
               if they intersected a face """
     distanceAlongLine = 0
-    pointsPerCurve = 8
+    pointsPerCurve = 20
     incriment = 1.0 / float(pointsPerCurve)
     
     for i in range (0, pointsPerCurve):
