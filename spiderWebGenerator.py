@@ -53,7 +53,6 @@ def generateWebs():
         """ pairs = list of start/end potential pairs as [startPointCloud, endPointClouds] """
         pairs = curveFaces(obj1, obj2)  
         createCurve(pairs, obj1, obj2)
-        
         """ createCurves runs again on all of the curves marked for intricacy in their name """
         pairs = processWebIntricacy()
         createCurve(pairs, obj1, obj2)
@@ -124,7 +123,7 @@ def createCurve(pairs, obj1, obj2):
                 midPoint[1] = pair['startPoint'][1] + (0.5 * (pair['endPoint'][1] - pair['startPoint'][1]))
                 midPoint[2] = pair['startPoint'][2] + (0.5 * (pair['endPoint'][2] - pair['startPoint'][2]))
 
-                newCurve = cmds.curve(degree=3, ep=[pair['startPoint'], midPoint, pair['endPoint']], n=ns)
+                newCurve = cmds.curve(degree=3, ep=[pair['startPoint'], midPoint, pair['endPoint']], n="inBetween")
                 hangAmount = pair['distance'] / 5
                 
             else:
@@ -184,7 +183,8 @@ def processWebIntricacy():
                 pointList.append(pointOnLine)
                 
             distanceAlongLine = distanceAlongLine + incriment
-        cmds.rename(web, ns)
+        print web, ns
+        cmds.rename(web, "processed")
         
     ''' match points with their closest neighbor to create start/end points '''    
     pairs = matchIntricacyPoints(pointList)
@@ -203,11 +203,11 @@ def determineSelectedObjects():
         if(cmds.objectType(childShape) == 'mesh'):
             meshList.append(shape)
 
-    if len(meshList) < 2:
-        print ('Not enough shapes selected.')
-    elif len(meshList) > 2:
-        print ('Too many shapes. Only first two will be used.')
-        meshList = meshList[0:2]
+    # if len(meshList) < 2:
+    #     print ('Not enough shapes selected.')
+    # elif len(meshList) > 2:
+    #     print ('Too many shapes. Only first two will be used.')
+    #     meshList = meshList[0:2]
 
     return meshList
     
@@ -450,7 +450,7 @@ def validateCurve(obj1, obj2, ns):
     Method 1: Generate points along the curve and create vectors between them to check
               if they intersected a face """
     distanceAlongLine = 0
-    pointsPerCurve = 8
+    pointsPerCurve = 10
     incriment = 1.0 / float(pointsPerCurve)
     
     for i in range (0, pointsPerCurve):
@@ -546,7 +546,7 @@ def angleChecker(pt, vertices):
     vBA = convertToVec(vertices[1], vertices[0])       
     vBC = convertToVec(vertices[1], vertices[2])        
     vBP = convertToVec(vertices[1], pt)        
-    
+
     vDA = convertToVec(vertices[3], vertices[0])       
     vDC = convertToVec(vertices[3], vertices[2])        
     vDP = convertToVec(vertices[3], pt)         
