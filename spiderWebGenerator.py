@@ -126,9 +126,11 @@ def createCurve(pairs, obj1, obj2):
             cmds.select(ns + ".cv[3]")
             cmds.move(0.0, -hang - offsetCV3, 0.0, r=True)
             
+            """ Checking if curve is piercing geo """
             needsFixing = validateCurve(obj1, obj2, ns)
             if needsFixing:
                 cmds.delete(ns)
+
             if(webIntricacy > 1):
                 cmds.rename((ns), ("processingIntricacy"),)
     
@@ -136,35 +138,24 @@ def createCurve(pairs, obj1, obj2):
     print "Curves created"
 
 
-def processWebIntricacy(webs=False):
+def processWebIntricacy():
     pointsPerCurve = 6
     incriment = 1.0 / float(pointsPerCurve)
-    if webs:
-        cmds.select("Web*")
-    else:
-        cmds.select(("processingIntricacy*"))
+    cmds.select(("processingIntricacy*"))
     webCurves = determineSelectedCurves()
 
     pointList = []
-    webList = []
 
     for web in webCurves:
-        webPoints = []
         distanceAlongLine = 0 
         for i in range (0, pointsPerCurve):
             distanceAlongLine = distanceAlongLine + incriment
             pointOnLine = cmds.pointOnCurve(web, top=True, pr=distanceAlongLine, p=True )
             pointList.append(pointOnLine)
-            webPoints.append(pointOnLine)
 
             # cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
             # cmds.move(pointOnLine[0], pointOnLine[1], pointOnLine[2], r=True)
         
-        if webs:
-            webList.append({'web': web, 'points':webPoints})
-   
-    if webs:
-        return webList
     print pointList
     
     ''' Run at your own risk will take about 2-3 min to finish '''
@@ -385,23 +376,13 @@ def setIntricacy():
 ##########################################   Base Procedures   ###########################################
 
 def validateCurve(obj1, obj2, ns):
-    """ Checks to see if the curve intersects geometry between any of the 
-        generated points along the curve"""
+    """ Checks to see if the curve intersects more than one face, if so, fix/delete it"""
     p0 = cmds.pointPosition(ns + ".cv[0]")
-    # cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
-    # cmds.move(p0[0], p0[1], p0[2], r=True)
-    p4 = cmds.pointPosition(ns + ".cv[4]")
-    # cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
-    # cmds.move(p4[0], p4[1], p4[2], r=True)
-    p2 = cmds.pointPosition(ns + ".cv[2]")
-    # cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
-    # cmds.move(p2[0], p2[1], p2[2], r=True)
     p1 =  cmds.pointPosition(ns +  ".cv[1]")
-    # cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
-    # cmds.move(p1[0], p1[1], p1[2], r=True)
+    p2 = cmds.pointPosition(ns + ".cv[2]")
     p3 =  cmds.pointPosition(ns +  ".cv[3]")
-    # cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
-    # cmds.move(p3[0], p3[1], p3[2], r=True)
+    p4 = cmds.pointPosition(ns + ".cv[4]")
+
     counter1 = 0
     counter2 = 0
     for face in obj1:
@@ -430,54 +411,7 @@ def validateCurve(obj1, obj2, ns):
         if intersects and -0.01 <=tValue <= 1.01:
             counter2 += 1
             if counter2 >= 2:
-                return True
-            # else:
-            #     cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
-            #     cmds.move(POI[0], POI[1], POI[2], r=True)
-    
-        
-    
-    
-    #webList = processWebIntricacy(True)
-    
-    # for pair in webList:
-    #     breakMe = False
-    #     counter = 0
-    #     for i in range (0, len(pair['points'])):
-    #         if breakMe:
-    #             break
-    #         vector = convertToVec(pair['points'][i], pair['points'][i+1])
-    #         # for face in obj1:
-    #         #     planeEq = getPlaneEq(face['vertices'][0], face['normal'])
-    #         #     POI = findIntersect(planeEq, points[i], face['center'], points[i+1], face['vertices'])
-    #         #     if POI:
-    #         #         """ Curve intersects a face"""
-    #         #         print "stop"
-    #         #     else:
-    #         #         print "pass"
-    #         for face in obj2:
-    #             if breakMe:
-    #                 break
-    #             planeEq = getPlaneEq(face['vertices'][0], face['normal'])
-    #             tValue = getTValue(planeEq, pair['points'][i], pair['points'][i+1])
-
-    #             POI = [0.0, 0.0, 0.0]
-                
-    #             POI[0] = pair['points'][i][0] + (tValue * (pair['points'][i+1][0] - pair['points'][i][0]))
-    #             POI[1] = pair['points'][i][1] + (tValue * (pair['points'][i+1][1] - pair['points'][i][1]))
-    #             POI[2] = pair['points'][i][2] + (tValue * (pair['points'][i+1][2] - pair['points'][i][2]))
-               
-    #             intersects = angleChecker(POI, face['vertices'])
-    #             if intersects:
-    #                 counter += 1
-    #                 print "intersectsssssssssssssss"
-    #                 print pair['web']
-                #             cmds.delete(pair['web'])
-                #             breakMe = True
-                #             break
-             
-                    
-            
+                return True      
 
 def tick(tick):
     global randomValue, maxRandom
