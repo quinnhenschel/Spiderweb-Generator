@@ -71,7 +71,7 @@ def generateGeometry():
     #need to add a check here to flip normals if they are going the wrong way (in instead of out). Im honestly not sure how to do this but will come back
 
 def createCurve(pairs, obj1, obj2):
-    global nextWebId, density, maxRandom, webIntricacy
+    global nextWebId, density, maxRandom, webIntricacy, fixWebs
     hangTick = rnd.randint(0, maxRandom)
     densityTick = rnd.randint(0, maxRandom)
     
@@ -126,10 +126,13 @@ def createCurve(pairs, obj1, obj2):
             cmds.select(ns + ".cv[3]")
             cmds.move(0.0, -hang - offsetCV3, 0.0, r=True)
             
-            validateCurve(obj1, obj2, ns)
+            needsFixing = validateCurve(obj1, obj2, ns)
+            if needsFixing:
+                cmds.delete(ns)
             if(webIntricacy > 1):
                 cmds.rename((ns), ("processingIntricacy"),)
-
+    
+    
     print "Curves created"
 
 
@@ -384,41 +387,53 @@ def setIntricacy():
 def validateCurve(obj1, obj2, ns):
     """ Checks to see if the curve intersects geometry between any of the 
         generated points along the curve"""
-    start = cmds.pointPosition(ns + ".ep[0]")
-    end = cmds.pointPosition(ns + ".ep[2]")
-    mid = cmds.pointPosition(ns + ".ep[1]")
+    p0 = cmds.pointPosition(ns + ".cv[0]")
+    # cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
+    # cmds.move(p0[0], p0[1], p0[2], r=True)
+    p4 = cmds.pointPosition(ns + ".cv[4]")
+    # cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
+    # cmds.move(p4[0], p4[1], p4[2], r=True)
+    p2 = cmds.pointPosition(ns + ".cv[2]")
+    # cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
+    # cmds.move(p2[0], p2[1], p2[2], r=True)
+    p1 =  cmds.pointPosition(ns +  ".cv[1]")
+    # cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
+    # cmds.move(p1[0], p1[1], p1[2], r=True)
+    p3 =  cmds.pointPosition(ns +  ".cv[3]")
+    # cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
+    # cmds.move(p3[0], p3[1], p3[2], r=True)
     counter1 = 0
     counter2 = 0
     for face in obj1:
         planeEq = getPlaneEq(face['vertices'][0], face['normal'])
-        tValue = getTValue(planeEq, start, end)
+        tValue = getTValue(planeEq, p0, p4)
         POI = [0.0, 0.0, 0.0]
-        POI[0] = ((1-tValue)**2.0)*start[0] + (2.0*tValue)*(1-tValue)*mid[0]+ (tValue**2.0)*end[0]
-        POI[1] = ((1-tValue)**2.0)*start[1] + (2.0*tValue)*(1-tValue)*mid[1]+ (tValue**2.0)*end[1]
-        POI[2] = ((1-tValue)**2.0)*start[2] + (2.0*tValue)*(1-tValue)*mid[2]+ (tValue**2.0)*end[2]
+        POI[0] = ((1-tValue)**4.0)*p0[0] + 4.0*((1-tValue)**3)*tValue*p1[0]+ 4.0*((1-tValue)**2)*(tValue**2)*p2[0] + 4.0*(1-tValue)*(tValue**3)*p3[0] + (tValue**4)*p4[0]
+        POI[1] = ((1-tValue)**4.0)*p0[1] + 4.0*((1-tValue)**3)*tValue*p1[1]+ 4.0*((1-tValue)**2)*(tValue**2)*p2[1] + 4.0*(1-tValue)*(tValue**3)*p3[1] + (tValue**4)*p4[1]
+        POI[2] = ((1-tValue)**4.0)*p0[2] + 4.0*((1-tValue)**3)*tValue*p1[2]+ 4.0*((1-tValue)**2)*(tValue**2)*p2[2] + 4.0*(1-tValue)*(tValue**3)*p3[2] + (tValue**4)*p4[2]
         intersects = angleChecker(POI, face['vertices'])
         if intersects and -0.01 <=tValue <= 1.01:
             counter1 += 1
             if counter1 >= 2:
-                print "obj1", ns
-            else:
-                cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
-                cmds.move(POI[0], POI[1], POI[2], r=True)
+                return True
+            # else:
+            #     cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
+            #     cmds.move(POI[0], POI[1], POI[2], r=True)
     for face in obj2:
         planeEq = getPlaneEq(face['vertices'][0], face['normal'])
-        tValue = getTValue(planeEq, end, start)
+        tValue = getTValue(planeEq, p0, p4)
         POI = [0.0, 0.0, 0.0]
-        POI[0] = ((1-tValue)**2.0)*end[0] + (2.0*tValue)*(1-tValue)*mid[0]+ (tValue**2.0)*start[0]
-        POI[1] = ((1-tValue)**2.0)*end[1] + (2.0*tValue)*(1-tValue)*mid[1]+ (tValue**2.0)*start[1]
-        POI[2] = ((1-tValue)**2.0)*end[2] + (2.0*tValue)*(1-tValue)*mid[2]+ (tValue**2.0)*start[2]
+        POI[0] = ((1-tValue)**4.0)*p0[0] + 4.0*((1-tValue)**3)*tValue*p1[0]+ 4.0*((1-tValue)**2)*(tValue**2)*p2[0] + 4.0*(1-tValue)*(tValue**3)*p3[0] + (tValue**4)*p4[0]
+        POI[1] = ((1-tValue)**4.0)*p0[1] + 4.0*((1-tValue)**3)*tValue*p1[1]+ 4.0*((1-tValue)**2)*(tValue**2)*p2[1] + 4.0*(1-tValue)*(tValue**3)*p3[1] + (tValue**4)*p4[1]
+        POI[2] = ((1-tValue)**4.0)*p0[2] + 4.0*((1-tValue)**3)*tValue*p1[2]+ 4.0*((1-tValue)**2)*(tValue**2)*p2[2] + 4.0*(1-tValue)*(tValue**3)*p3[2] + (tValue**4)*p4[2]
         intersects = angleChecker(POI, face['vertices'])
         if intersects and -0.01 <=tValue <= 1.01:
             counter2 += 1
             if counter2 >= 2:
-                print "obj2", ns
-            else:
-                cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
-                cmds.move(POI[0], POI[1], POI[2], r=True)
+                return True
+            # else:
+            #     cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
+            #     cmds.move(POI[0], POI[1], POI[2], r=True)
     
         
     
