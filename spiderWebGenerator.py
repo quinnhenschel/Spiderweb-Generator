@@ -40,17 +40,23 @@ def generateWebs():
     setRandomness()
     setIntricacy()
     meshes = determineSelectedObjects()
-    
-    """ obj1/2 = dictionary of faces as {normal, center, radius, vertices} """
-    obj1 = findFaces(meshes[0])     
-    obj2 = findFaces(meshes[1])
-    """ pairs = list of start/end potential pairs as [startPointCloud, endPointClouds] """
-    pairs = curveFaces(obj1, obj2)  
-    createCurve(pairs, obj1, obj2)
-    
-    """ createCurves runs again on all of the curves marked for intricacy in their name """
-    pairs = processWebIntricacy()
-    createCurve(pairs, obj1, obj2)
+    print meshes
+    for i in range(0, len(meshes)-1):
+        
+        j = i+1
+        if i == len(meshes)-1:
+            j = 0
+        print meshes[i], meshes[j]
+        """ obj1/2 = dictionary of faces as {normal, center, radius, vertices} """
+        obj1 = findFaces(meshes[i])     
+        obj2 = findFaces(meshes[j])
+        """ pairs = list of start/end potential pairs as [startPointCloud, endPointClouds] """
+        pairs = curveFaces(obj1, obj2)  
+        createCurve(pairs, obj1, obj2)
+        
+        """ createCurves runs again on all of the curves marked for intricacy in their name """
+        pairs = processWebIntricacy()
+        createCurve(pairs, obj1, obj2)
 
 
 def generateGeometry():
@@ -111,7 +117,7 @@ def createCurve(pairs, obj1, obj2):
 
             """ Check if this is start/end point clouds from faces or list of intricacy curve point matches """
             if 'distance' in pairs[0]:
-
+                endFace = -1
                 """ Midpoint of curve for hang """
                 midPoint = [0.0, 0.0, 0.0]
                 midPoint[0] = pair['startPoint'][0] + (0.5 * (pair['endPoint'][0] - pair['startPoint'][0]))
@@ -139,8 +145,8 @@ def createCurve(pairs, obj1, obj2):
                 hang = hangAmount
 
             """ Midpoint (ep[1]), and control verticy to L/R of it (cv[1], cv[3]) moved down to create web hang. Moving cv[1] and cv[3] also determines offset"""
-            cmds.select(newCurve + ".ep[1]")
-            cmds.move(0.0, -hang/1.5, 0.0, r=True)
+            cmds.select(newCurve + ".cv[2]")
+            cmds.move(0.0, -hang, 0.0, r=True)
             cmds.select(newCurve + ".cv[1]")
             cmds.move(0.0, -hang - offsetCV1, 0.0, r=True)
             cmds.select(newCurve + ".cv[3]")
@@ -149,7 +155,7 @@ def createCurve(pairs, obj1, obj2):
             """ Checking if curve is piercing geo """
             needsFixing = validateCurve(obj1, obj2, newCurve)
             
-            if 'distance' not in pairs[0] and not needsFixing:
+            if endFace>=0 and not needsFixing:
                 newCurve = cmds.rename(ns, "processingIntricacy")
 
     print "Curves created"
@@ -161,7 +167,7 @@ def processWebIntricacy():
     incriment = 1.0 / float(pointsPerCurve)
     ns = "Web" + str(nextWebId)
 
-    cmds.select("processingIntricacy*")
+    cmds.select("processingIntricacy*", r=True)
     webCurves = determineSelectedCurves()
 
     ''' loop through each web marked for extra intricacy and make list of points along those curves '''
@@ -197,12 +203,11 @@ def determineSelectedObjects():
         if(cmds.objectType(childShape) == 'mesh'):
             meshList.append(shape)
 
-    # This to be taken out/adjusted for when we're ready for multiple shapes      
-    # if len(meshList) < 2:
-    #     print ('Not enough shapes selected.')
-    # elif len(meshList) > 2:
-    #     print ('Too many shapes. Only first two will be used.')
-    #     meshList = meshList[0:2]
+    if len(meshList) < 2:
+        print ('Not enough shapes selected.')
+    elif len(meshList) > 2:
+        print ('Too many shapes. Only first two will be used.')
+        meshList = meshList[0:2]
 
     return meshList
     
@@ -320,7 +325,7 @@ def curveFaces(obj1, obj2):
         endPointsAll = []
         while counter < maxEndFaces:
             dp = getDotProduct(item['startNrml'], item['endNrml' + str(counter)])
-            if dp < 0:
+            if dp < -0.5:
                 """ Getting end point clouds """
                 endPE = getPlaneEq(item['endCenter'+ str(counter)], item['endNrml'+ str(counter)])
                 endPoints = generatePointCloud(endPE, item['endCenter'+ str(counter)], item['endRadius'+ str(counter)], item['endVerts'+ str(counter)])
@@ -336,6 +341,7 @@ def curveFaces(obj1, obj2):
     
     print "Got pairs"
     return pairs
+
 
 def matchIntricacyPoints(pointList):
     """ For each point loop through all other points and find distance """
@@ -380,24 +386,90 @@ def setIntricacy():
     webIntricacy = cmds.intSliderGrp('webIntricacy', q=True, v=True)
 
 
-def manipulateCurve(web, POI, planeEq, tValue, face):
-    print "me", web
-    cmds.delete(web)
+def generatePointCloud(planeEq, POP, radius, vertices):
+    global density
+    spawnPoint = []
+
+    for axes in range(len(POP)):    
+        """ Moving the start point (POP) off of face along the normal """
+        spawnPoint.append(POP[axes] + (planeEq[axes] * 0.3))    
+
+    pointCloud = []
+    point = []
+    while len(pointCloud) < density * 2:
+        """ Generate random point to send new curve to """
+        x = rnd.uniform((-1*radius[0]), radius[0])
+        y = rnd.uniform((-1*radius[1]), radius[1])
+        z = rnd.uniform((-1*radius[2]), radius[2])
+        point = [POP[0] + x, POP[1] + y, POP[2]+z]
+
+        """  Check that the line intersects the plane """
+        POI, tValue = findIntersect(planeEq, spawnPoint, POP, point, vertices)
+        if POI:
+            pointCloud.append(POI)
+        else:
+            continue
+    
+    return pointCloud
 
 
 
+def findIntersect(planeEq, startPoint, POP, endPoint, vertices):
+    """  Check to see if the curve intersected the plane """
+    vecStart = convertToVec(startPoint, POP) 
+    vecEnd = convertToVec(endPoint, POP)
+    kStart = (planeEq[0]*vecStart[0])+(planeEq[1]*vecStart[1])+(planeEq[2]*vecStart[2])
+    kEnd = (planeEq[0]*vecEnd[0])+(planeEq[1]*vecEnd[1])+(planeEq[2]*vecEnd[2])
 
+    if(((kStart>0.0) and (kEnd>0.0)) or ((kStart<0.0) and (kEnd<0.0))):
+        """ Same side of plane, did not intersect """
+        return False, 0
+    else:
+        """  Intersected, find intersection point """
+        tValue = getTValue(planeEq, startPoint, endPoint)
+        if tValue == False:
+            return False, 0
+        else:
+            """  Sub t into line equation to get intersection point """
+            POI = [0.0, 0.0, 0.0]
+            POI[0] = startPoint[0] + (tValue * (endPoint[0] - startPoint[0]))
+            POI[1] = startPoint[1] + (tValue * (endPoint[1] - startPoint[1]))
+            POI[2] = startPoint[2] + (tValue * (endPoint[2] - startPoint[2]))
+            
+            """ Check that it intersects within the face """
+            inFace = angleChecker(POI, vertices)
+            if inFace:
+                return POI, tValue
+            else:
+                return False, 0
 
-
-
-
-
-
-
-##########################################   Base Procedures   ###########################################
 
 def validateCurve(obj1, obj2, ns):
-    """ Checks to see if the curve intersects more than one face, if so, fix/delete it"""
+    """ Checks to see if the curve intersects more than one face, if so, delete it
+   
+    Method 1: Generate points along the curve and create vectors between them to check
+              if they intersected a face """
+    distanceAlongLine = 0
+    pointsPerCurve = 8
+    incriment = 1.0 / float(pointsPerCurve)
+    
+    for i in range (0, pointsPerCurve):
+        pointOnLine = cmds.pointOnCurve(ns, top=True, pr=distanceAlongLine , p=True )
+        distanceAlongLine += incriment
+        p0 = cmds.pointPosition(ns + ".cv[" + str(i) + "]")
+        p1 = cmds.pointPosition(ns + ".cv[" + str(i+1) + "]")
+        for face in obj1:
+            planeEq = getPlaneEq(face['vertices'][0], face['normal'])
+            POI, tValue = findIntersect(planeEq, p0, face['vertices'][0], p1, face['vertices'])
+            if POI and 0.1 <= tValue <= 0.9:
+                """ If Tvalue is 1 or 0 it's likely the starting or end point of curve so can skip it"""
+                manipulateCurve(ns, POI, planeEq, tValue, face)
+                return True
+
+
+    """ Method 2: Using equation of curve check for intersections with faces, if it intersects with more 
+        than 1 face we know to delete it"""
+
     p0 = cmds.pointPosition(ns + ".cv[0]")
     p1 =  cmds.pointPosition(ns +  ".cv[1]")
     p2 = cmds.pointPosition(ns + ".cv[2]")
@@ -410,18 +482,15 @@ def validateCurve(obj1, obj2, ns):
         planeEq = getPlaneEq(face['vertices'][0], face['normal'])
         tValue = getTValue(planeEq, p0, p4)
         POI = [0.0, 0.0, 0.0]
-        POI[0] = ((1-tValue)**4.0)*p0[0] + 4.0*((1-tValue)**3)*tValue*p1[0]+ 4.0*((1-tValue)**2)*(tValue**2)*p2[0] + 4.0*(1-tValue)*(tValue**3)*p3[0] + (tValue**4)*p4[0]
-        POI[1] = ((1-tValue)**4.0)*p0[1] + 4.0*((1-tValue)**3)*tValue*p1[1]+ 4.0*((1-tValue)**2)*(tValue**2)*p2[1] + 4.0*(1-tValue)*(tValue**3)*p3[1] + (tValue**4)*p4[1]
-        POI[2] = ((1-tValue)**4.0)*p0[2] + 4.0*((1-tValue)**3)*tValue*p1[2]+ 4.0*((1-tValue)**2)*(tValue**2)*p2[2] + 4.0*(1-tValue)*(tValue**3)*p3[2] + (tValue**4)*p4[2]
+        POI[0] = ((1-tValue)**4.0)*p0[0] + (4.0*tValue)*((1-tValue)**3)*p1[0]+ (4.0*(tValue**2))*((1-tValue)**2)*p2[0] + (4.0*(tValue**3))*(1-tValue)*p3[0] + (tValue**4)*p4[0]
+        POI[1] = ((1-tValue)**4.0)*p0[1] + (4.0*tValue)*((1-tValue)**3)*p1[1]+ (4.0*(tValue**2))*((1-tValue)**2)*p2[1] + (4.0*(tValue**3))*(1-tValue)*p3[1] + (tValue**4)*p4[1]
+        POI[2] = ((1-tValue)**4.0)*p0[2] + (4.0*tValue)*((1-tValue)**3)*p1[2]+ (4.0*(tValue**2))*((1-tValue)**2)*p2[2] + (4.0*(tValue**3))*(1-tValue)*p3[2] + (tValue**4)*p4[2]
         intersects = angleChecker(POI, face['vertices'])
         if intersects and -0.001 <=tValue <= 1.001:
             counter1 += 1
             if counter1 >= 2:
                 manipulateCurve(ns, POI, planeEq, tValue, face)
-                return True
-        
-               
-                
+                return True        
                 
     for face in obj2:
         planeEq = getPlaneEq(face['vertices'][0], face['normal'])
@@ -437,6 +506,21 @@ def validateCurve(obj1, obj2, ns):
                 manipulateCurve(ns, POI, planeEq, tValue, face)
                 return True    
 
+def manipulateCurve(web, POI, planeEq, tValue, face):
+    # print "Got It", web
+    cmds.delete(web)
+
+
+
+
+
+
+
+
+
+
+
+##########################################   Base Procedures   ###########################################
 def tick(tick):
     global randomValue, maxRandom
     if tick >= (maxRandom - randomValue)/2.5:
@@ -456,65 +540,6 @@ def randomizeMe(value, max, integer):
         or up to double the original value if max were to be set to 2, triple if max was 3, etc. """
         newValue = value * rnd.uniform(0.5, max)
     return newValue
-
-
-def generatePointCloud(planeEq, POP, radius, vertices):
-    global density
-    spawnPoint = []
-
-    for axes in range(len(POP)):    
-        """ Moving the start point (POP) off of face along the normal """
-        spawnPoint.append(POP[axes] + (planeEq[axes] * 0.3))    
-
-    pointCloud = []
-    point = []
-    while len(pointCloud) < density * 2:
-        """ Generate random point to send new curve to """
-        x = rnd.uniform((-1*radius[0]), radius[0])
-        y = rnd.uniform((-1*radius[1]), radius[1])
-        z = rnd.uniform((-1*radius[2]), radius[2])
-        point = [POP[0] + x, POP[1] + y, POP[2]+z]
-
-        """  Check that the line intersects the plane """
-        POI = findIntersect(planeEq, spawnPoint, POP, point, vertices)
-        if POI:
-            pointCloud.append(POI)
-        else:
-            continue
-    
-    return pointCloud
-
-
-
-def findIntersect(planeEq, startPoint, POP, endPoint, vertices):
-    """  Check to see if the curve intersected the plane """
-    vecStart = convertToVec(startPoint, POP) 
-    vecEnd = convertToVec(endPoint, POP)
-    kStart = (planeEq[0]*vecStart[0])+(planeEq[1]*vecStart[1])+(planeEq[2]*vecStart[2])
-    kEnd = (planeEq[0]*vecEnd[0])+(planeEq[1]*vecEnd[1])+(planeEq[2]*vecEnd[2])
-
-    if(((kStart>0.0) and (kEnd>0.0)) or ((kStart<0.0) and (kEnd<0.0))):
-        """ Same side of plane, did not intersect """
-        # print "same side"
-        return
-    else:
-        """  Intersected, find intersection point and add to pointCloud """
-        tValue = getTValue(planeEq, startPoint, endPoint)
-        if tValue == False:
-            print ("denom zero")
-        else:
-            """  Sub t into line equation to get intersection point """
-            POI = [0.0, 0.0, 0.0]
-            POI[0] = startPoint[0] + (tValue * (endPoint[0] - startPoint[0]))
-            POI[1] = startPoint[1] + (tValue * (endPoint[1] - startPoint[1]))
-            POI[2] = startPoint[2] + (tValue * (endPoint[2] - startPoint[2]))
-            
-            """ Check that it intersects within the face """
-            inFace = angleChecker(POI, vertices)
-            if inFace:
-                return POI
-            else:
-                return
 
 
 def angleChecker(pt, vertices):
