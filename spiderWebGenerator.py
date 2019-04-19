@@ -23,7 +23,7 @@ cmds.picture(image="F:\Desktop\Spiderweb-Generator\spiderWebs.png", h= 440, w=50
 cmds.intSliderGrp('density',l="Web Density", f=True, min=1, max=10, value=1)
 cmds.intSliderGrp('hangAmount', l="Amount of Hang", f=True, min=1, max=20, value=1)
 cmds.intSliderGrp('hangOffset', l="Hang Offset", f=True, min=-10, max=10, value=0)
-cmds.intSliderGrp('webIntricacy', l="Web Intricacy", f=True, min=1, max=5, value=1)
+cmds.intSliderGrp('webIntricacy', l="Web Intricacy", f=True, min=0, max=10, value=1)
 cmds.intSliderGrp('random', l="Random Factor", f=True, min=0, max=10, value=1)               
 cmds.button(label="Create Webs", command=('generateWebs()'), align='center', height=50)
 cmds.intSliderGrp('stringThickness', l="Strand Thickness", f=True, min=1, max=20, value=1)               
@@ -43,10 +43,13 @@ def generateWebs():
     """ obj1/2 = dictionary of faces as {normal, center, radius, vertices} """
     obj1 = findFaces(meshes[0])     
     obj2 = findFaces(meshes[1])
-    """ pairs = list of start/end potential pairs as [startPointCloud, endPointCloud1, EPC2, EPC3] """
+    """ pairs = list of start/end potential pairs as [startPointCloud, endPointClouds] """
     pairs = curveFaces(obj1, obj2)  
     createCurve(pairs, obj1, obj2)
-    #processWebIntricacy()
+    
+    """ createCurves runs again on all of the curves marked for intricacy in their name """
+    pairs = processWebIntricacy()
+    createCurve(pairs, obj1, obj2)
 
 
 def generateGeometry():
@@ -71,7 +74,7 @@ def generateGeometry():
     #need to add a check here to flip normals if they are going the wrong way (in instead of out). Im honestly not sure how to do this but will come back
 
 def createCurve(pairs, obj1, obj2):
-    global nextWebId, density, maxRandom, webIntricacy, fixWebs
+    global nextWebId, density, maxRandom, webIntricacy
     hangTick = rnd.randint(0, maxRandom)
     densityTick = rnd.randint(0, maxRandom)
     
@@ -96,21 +99,37 @@ def createCurve(pairs, obj1, obj2):
         else:
             densityAmount = density 
 
+        if 'distance' in pairs[0]:
+            densityAmount =  1
+
         """ Loop to create x amount of webs per face """
         for i in range (0, densityAmount):
-            endFace = rnd.randint(0, 2)
             randomizeHang, hangTick = tick(hangTick)
             nextWebId = nextWebId + 1
             ns = "Web" + str(nextWebId)
 
-            """ Midpoint of curve for hang """
-            
-            midPoint = [0.0, 0.0, 0.0]
-            midPoint[0] = pair[0][i][0] + (0.5 * (pair[1][endFace][i][0] - pair[0][i][0]))
-            midPoint[1] = pair[0][i][1] + (0.5 * (pair[1][endFace][i][1] - pair[0][i][1]))
-            midPoint[2] = pair[0][i][2] + (0.5 * (pair[1][endFace][i][2] - pair[0][i][2]))
+            """ Check if this is start/end point clouds from faces or list of intricacy curve point matches """
+            if 'distance' in pairs[0]:
 
-            cmds.curve(degree=3, ep=[pair[0][i], midPoint, pair[1][endFace][i]], n=ns)
+                """ Midpoint of curve for hang """
+                midPoint = [0.0, 0.0, 0.0]
+                midPoint[0] = pair['startPoint'][0] + (0.5 * (pair['endPoint'][0] - pair['startPoint'][0]))
+                midPoint[1] = pair['startPoint'][1] + (0.5 * (pair['endPoint'][1] - pair['startPoint'][1]))
+                midPoint[2] = pair['startPoint'][2] + (0.5 * (pair['endPoint'][2] - pair['startPoint'][2]))
+
+                newCurve = cmds.curve(degree=3, ep=[pair['startPoint'], midPoint, pair['endPoint']], n=ns)
+                hangAmount = pair['distance'] / 5
+                
+            else:
+                """ Midpoint of curve for hang """
+                endFace = randomizeMe(0, len(pair[1]) -1, True)
+                midPoint = [0.0, 0.0, 0.0]
+                midPoint[0] = pair[0][i][0] + (0.5 * (pair[1][endFace][i][0] - pair[0][i][0]))
+                midPoint[1] = pair[0][i][1] + (0.5 * (pair[1][endFace][i][1] - pair[0][i][1]))
+                midPoint[2] = pair[0][i][2] + (0.5 * (pair[1][endFace][i][2] - pair[0][i][2]))
+            
+                newCurve = cmds.curve(degree=3, ep=[pair[0][i], midPoint, pair[1][endFace][i]], n=ns)
+                
             
             """ For randomizing the value of the hang """
             if randomizeHang:
@@ -119,50 +138,52 @@ def createCurve(pairs, obj1, obj2):
                 hang = hangAmount
 
             """ Midpoint (ep[1]), and control verticy to L/R of it (cv[1], cv[3]) moved down to create web hang. Moving cv[1] and cv[3] also determines offset"""
-            cmds.select(ns + ".ep[1]")
+            cmds.select(newCurve + ".ep[1]")
             cmds.move(0.0, -hang/1.5, 0.0, r=True)
-            cmds.select(ns + ".cv[1]")
+            cmds.select(newCurve + ".cv[1]")
             cmds.move(0.0, -hang - offsetCV1, 0.0, r=True)
-            cmds.select(ns + ".cv[3]")
+            cmds.select(newCurve + ".cv[3]")
             cmds.move(0.0, -hang - offsetCV3, 0.0, r=True)
             
             """ Checking if curve is piercing geo """
-            needsFixing = validateCurve(obj1, obj2, ns)
+            needsFixing = validateCurve(obj1, obj2, newCurve)
             if needsFixing:
-                cmds.delete(ns)
+                cmds.delete(newCurve)
+            elif 'distance' not in pairs[0]:
+                newCurve = cmds.rename((ns), ("processingIntricacy"))
 
-            if(webIntricacy > 1):
-                cmds.rename((ns), ("processingIntricacy"),)
-    
-    
+                
+
     print "Curves created"
 
 
 def processWebIntricacy():
-    pointsPerCurve = 6
+    pointsPerCurve = webIntricacy + 1
     incriment = 1.0 / float(pointsPerCurve)
+    ns = "Web" + str(nextWebId)
+
     cmds.select(("processingIntricacy*"))
     webCurves = determineSelectedCurves()
 
+    ''' loop through each web marked for extra intricacy and make list of points along those curves '''
     pointList = []
 
     for web in webCurves:
         distanceAlongLine = 0 
         for i in range (0, pointsPerCurve):
+            randomScaler = randomizeMe(2.5, 0.2, False)
+            pointOnLine = cmds.pointOnCurve(web, top=True, pr=distanceAlongLine * randomScaler , p=True )
+
+            ''' ignore first point because it is on the geometry, otherwise append the points from this curve to the pointList '''
+            if(i != 0):
+                pointList.append(pointOnLine)
+                
             distanceAlongLine = distanceAlongLine + incriment
-            pointOnLine = cmds.pointOnCurve(web, top=True, pr=distanceAlongLine, p=True )
-            pointList.append(pointOnLine)
-
-            # cube = cmds.polyCube(sx=1, sy=1, sz=1, h=0.02, w=0.02, d=0.02)
-            # cmds.move(pointOnLine[0], pointOnLine[1], pointOnLine[2], r=True)
+        cmds.rename((web), (ns),)
         
-    print pointList
-    
-    ''' Run at your own risk will take about 2-3 min to finish '''
-    #pairs = matchIntricacyPoints(pointList)
-    #print pairs
-
-
+    ''' match points with their closest neighbor to create start/end points '''    
+    pairs = matchIntricacyPoints(pointList)
+    return pairs
 
 
 ##########################################    General Procedures   ###########################################
@@ -216,7 +237,6 @@ def findFaces(mesh):
         vtxB = cmds.getAttr(mesh + ".vt[" + vtxIdx[1] + "]")
         vtxC = cmds.getAttr(mesh + ".vt[" + vtxIdx[2] + "]")
         vtxD = cmds.getAttr(mesh + ".vt[" + vtxIdx[3] + "]")
-
         
         """ Make each vertex a list """
         vtxA = list(vtxA[0])
@@ -255,6 +275,7 @@ def findFaces(mesh):
     return faces
 
 def curveFaces(obj1, obj2):
+    maxEndFaces = 5
     """ Finds faces with opposite normals and close in distance """
     distances = []
     for start in obj1:
@@ -275,41 +296,38 @@ def curveFaces(obj1, obj2):
             }
             tmp.append(distanceDict)
         tmp.sort()
-
-        """ Selecting the closest 3 end faces to the start face """
         temp = {
             'startCenter': tmp[0]['startCenter'], 
             'startNrml': tmp[0]['startNrml'], 
             'startRadius': tmp[0]['startRadius'], 
             'startVerts': tmp[0]['startVerts'], 
-            'endRadius': tmp[0]['endRadius'], 
-            'endCenter1': tmp[0]['endCenter'], 
-            'endNrml1': tmp[0]['endNrml'], 
-            'endVerts1': tmp[0]['endVerts'], 
-            'endCenter2': tmp[1]['endCenter'], 
-            'endNrml2': tmp[1]['endNrml'], 
-            'endVerts2': tmp[1]['endVerts'],
-            'endCenter3': tmp[2]['endCenter'], 
-            'endNrml3': tmp[2]['endNrml'],
-            'endVerts3': tmp[2]['endVerts'],
-        }
+         }
+
+        """ Selecting the closest x amount of end faces to the start face """
+        for endFace in range (0, maxEndFaces):
+            temp.update([
+                ('endRadius' + str(endFace), tmp[endFace]['endRadius']),
+                ('endCenter'+ str(endFace), tmp[endFace]['endCenter']),
+                ('endNrml'+ str(endFace), tmp[endFace]['endNrml']),
+                ('endVerts'+ str(endFace), tmp[endFace]['endVerts']), 
+            ])
         distances.append(temp)
 
     pairs = []
 
     for item in distances:
-        counter = 1
+        counter = 0
         endPointsAll = []
-        while counter <= 3:
+        while counter < maxEndFaces:
             dp = getDotProduct(item['startNrml'], item['endNrml' + str(counter)])
             if dp < 0:
                 """ Getting end point clouds """
                 endPE = getPlaneEq(item['endCenter'+ str(counter)], item['endNrml'+ str(counter)])
-                endPoints = generatePointCloud(endPE, item['endCenter'+ str(counter)], item['endRadius'], item['endVerts'+ str(counter)])
+                endPoints = generatePointCloud(endPE, item['endCenter'+ str(counter)], item['endRadius'+ str(counter)], item['endVerts'+ str(counter)])
                 endPointsAll.append(endPoints)
             
             counter += 1
-        if len(endPointsAll) == 3 :
+        if len(endPointsAll) > 0:
             """ Start point cloud """
             startPE = getPlaneEq(item['startCenter'], item['startNrml'])
             startPoints = generatePointCloud(startPE, item['startCenter'], item['startRadius'], item['startVerts'])
@@ -320,31 +338,32 @@ def curveFaces(obj1, obj2):
     return pairs
 
 def matchIntricacyPoints(pointList):
-    """ xxxxx """
-    distances = []
+    """ For each point loop through all other points and find distance """
+    matches = []
     for pointA in pointList:
-        print "point A: "
-        print pointA
         tmp = []
         for pointB in pointList:
-            print "point B: "
-            print pointB
-            if(pointA == pointB):
-                break
             distance = convertToVec(pointA, pointB)
             distance = getMagnitude(distance)
-            distanceDict = {
+            
+            """ Store match data in dictonary """
+            matchesDict = {
                 'distance': distance, 
                 'startPoint': pointA, 
                 'endPoint': pointB, 
             }
-            tmp.append(distanceDict)
-            print tmp
+
+            """ If distance is 0 ignore this point, otherwise append it to the matches dictionary """
+            if (matchesDict['distance'] != 0.0):
+                tmp.append(matchesDict)
+
+        """ sort by distance (cuz its index [0]) and select match with least distance between S/E points """
         tmp.sort()
-        print tmp
-        #distances.append(tmp[0])
-    #print "Got distances"
-    #return distances    
+        matches.append(tmp[0])
+        """ remove each pointB from the list as it is compared. This is mostly just to save time when processing. """
+        pointList.pop(0)
+    print "Got matches"
+    return matches    
 
 
 def setDensity():
@@ -393,7 +412,7 @@ def validateCurve(obj1, obj2, ns):
         POI[1] = ((1-tValue)**4.0)*p0[1] + 4.0*((1-tValue)**3)*tValue*p1[1]+ 4.0*((1-tValue)**2)*(tValue**2)*p2[1] + 4.0*(1-tValue)*(tValue**3)*p3[1] + (tValue**4)*p4[1]
         POI[2] = ((1-tValue)**4.0)*p0[2] + 4.0*((1-tValue)**3)*tValue*p1[2]+ 4.0*((1-tValue)**2)*(tValue**2)*p2[2] + 4.0*(1-tValue)*(tValue**3)*p3[2] + (tValue**4)*p4[2]
         intersects = angleChecker(POI, face['vertices'])
-        if intersects and -0.01 <=tValue <= 1.01:
+        if intersects and -0.001 <=tValue <= 1.001:
             counter1 += 1
             if counter1 >= 2:
                 return True
@@ -408,7 +427,7 @@ def validateCurve(obj1, obj2, ns):
         POI[1] = ((1-tValue)**4.0)*p0[1] + 4.0*((1-tValue)**3)*tValue*p1[1]+ 4.0*((1-tValue)**2)*(tValue**2)*p2[1] + 4.0*(1-tValue)*(tValue**3)*p3[1] + (tValue**4)*p4[1]
         POI[2] = ((1-tValue)**4.0)*p0[2] + 4.0*((1-tValue)**3)*tValue*p1[2]+ 4.0*((1-tValue)**2)*(tValue**2)*p2[2] + 4.0*(1-tValue)*(tValue**3)*p3[2] + (tValue**4)*p4[2]
         intersects = angleChecker(POI, face['vertices'])
-        if intersects and -0.01 <=tValue <= 1.01:
+        if intersects and -0.001 <=tValue <= 1.001:
             counter2 += 1
             if counter2 >= 2:
                 return True      
