@@ -199,8 +199,8 @@ def determineSelectedObjects():
     for shape in selectedShapes:
         if(cmds.objectType(shape) == 'transform'):
             childShape = cmds.listRelatives(shape, fullPath=True, shapes=True)
-        if(cmds.objectType(childShape) == 'mesh'):
-            meshList.append(shape)
+            if(cmds.objectType(childShape) == 'mesh'):
+                meshList.append(shape)
 
     if len(meshList) < 2:
         print ('Not enough shapes selected.')
@@ -213,8 +213,8 @@ def determineSelectedCurves():
     for shape in selectedCurves:
         if(cmds.objectType(shape) == 'transform'):
             childShape = cmds.listRelatives(shape, fullPath=True, shapes=True)
-        if(cmds.objectType(childShape) == 'nurbsCurve'):
-            curveList.append(shape)
+            if(cmds.objectType(childShape) == 'nurbsCurve'):
+                curveList.append(shape)
       
     if len(curveList) < 1:
         print ('Not enough curves selected.')
