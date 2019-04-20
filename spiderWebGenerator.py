@@ -40,9 +40,7 @@ def generateWebs():
     setRandomness()
     setIntricacy()
     meshes = determineSelectedObjects()
-    print meshes
     for i in range(0, len(meshes)-1):
-        
         j = i+1
         if i == len(meshes)-1:
             j = 0
@@ -69,16 +67,11 @@ def generateGeometry():
     circleGeo = 'webExtrudeMap'
     
     for web in webCurves:
-        #cmds.insertKnotCurve(web, p=(1), ch=True, nk=5, ib=True, rpo=True)
         """ Extrude circle curve along web curve to create geometry (po=0 is nurbs surface, po=1 is polygons, po=3 is bezier surface) """
         cmds.extrude(circleGeo, web, ch=True, rn=False, po=1, et=2, ucp=1, fpt=1, upn=1, rotation=0, scale=1, rsp=1, n='web')
-        #with polygons the verticies are getting messed up in some places. We could maybe tesselate them at the end if we want to (next line)
-        #cmds.nurbsToPoly(ch=True, f=2, n='web_GEO')
 
         cmds.delete(web)
-
     cmds.delete(circleGeo)
-    #need to add a check here to flip normals if they are going the wrong way (in instead of out). Im honestly not sure how to do this but will come back
 
 def createCurve(pairs, obj1, obj2):
     global nextWebId, density, maxRandom, webIntricacy
@@ -160,15 +153,10 @@ def createCurve(pairs, obj1, obj2):
             if endFace>=0 and not needsFixing:
                 
                 curvesForIntricacy.append(newCurve)
-                #newCurve = cmds.rename(ns, "processingIntricacy")
 
     print "Curves created"
 
-    print 'curvesForIntricacy'
-    print curvesForIntricacy
     return curvesForIntricacy
-    gfdg
-
 
 def processWebIntricacy(curvesForIntricacy):
     global nextWebId
@@ -177,14 +165,9 @@ def processWebIntricacy(curvesForIntricacy):
     ns = "Web" + str(nextWebId)
 
     length = len(curvesForIntricacy)
-    print 'length'
-    print length
-
 
     cmds.select(curvesForIntricacy, r=True)
     webCurves = determineSelectedCurves()
-    print "webCurves"
-    print webCurves
 
     ''' loop through each web marked for extra intricacy and make list of points along those curves '''
     pointList = []
@@ -221,7 +204,6 @@ def determineSelectedObjects():
 
     if len(meshList) < 2:
         print ('Not enough shapes selected.')
-
 
     return meshList
     
@@ -289,7 +271,6 @@ def findFaces(mesh):
             'vertices': vertices,
         }  
         faces.append(faceInfo)
-    print "Got faces"
     return faces
 
 def curveFaces(obj1, obj2):
@@ -339,7 +320,7 @@ def curveFaces(obj1, obj2):
         endPointsAll = []
         while counter < maxEndFaces:
             dp = getDotProduct(item['startNrml'], item['endNrml' + str(counter)])
-            if dp < -0.5:
+            if dp < 0:
                 """ Getting end point clouds """
                 endPE = getPlaneEq(item['endCenter'+ str(counter)], item['endNrml'+ str(counter)])
                 endPoints = generatePointCloud(endPE, item['endCenter'+ str(counter)], item['endRadius'+ str(counter)], item['endVerts'+ str(counter)])
@@ -353,7 +334,6 @@ def curveFaces(obj1, obj2):
             pair = [startPoints, endPointsAll]
             pairs.append(pair)
     
-    print "Got pairs"
     return pairs
 
 
@@ -382,7 +362,6 @@ def matchIntricacyPoints(pointList):
         matches.append(tmp[0])
         """ remove each pointB from the list as it is compared. This is mostly just to save time when processing. """
         pointList.pop(0)
-    print "Got matches"
     return matches    
 
 
